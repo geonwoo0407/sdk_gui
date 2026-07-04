@@ -8,6 +8,7 @@ import os
 import signal
 import struct
 import xml.etree.ElementTree as ET
+# 아무거나나ㅏㅏㅏ
 
 # 🚨 [필수] 파이썬 3.9+ fractions.gcd -> math.gcd 긴급 호환성 패치
 fractions.gcd = math.gcd
