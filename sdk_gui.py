@@ -30,6 +30,7 @@ from PyQt5.QtGui import QPainter, QColor, QPen, QMatrix4x4
 
 # 🔥 다이나믹셀 SDK 라이브러리 임포트
 from dynamixel_sdk import *
+from dynamixel_sdk.protocol2_packet_handler import Protocol2PacketHandler
 
 # 🤖 하드웨어 및 다이나믹셀 통신 주소 세팅 (MX 시리즈 프로토콜 2.0 기준)
 ADDR_TORQUE_ENABLE          = 64
@@ -54,6 +55,77 @@ DXL_MAX_DEG                 = (DXL_MAX_POSITION - DXL_CENTER_POSITION) * DXL_DEG
 # 0이면 STL을 줄이지 않고 원본 mesh를 렌더링합니다. 중간 샘플링은 표면이 찢어져 보여서 기본은 원본 유지.
 MAX_RENDER_TRIANGLES_PER_MESH = 0
 STATE_FILENAME = "sdk_gui_state.json"
+
+
+class SafeProtocol2PacketHandler(Protocol2PacketHandler):
+    def _release_port(self, port):
+        if hasattr(port, "is_using"):
+            port.is_using = False
+
+    def txPacket(self, port, txpacket):
+        if getattr(port, "is_using", False):
+            self._release_port(port)
+        try:
+            return super().txPacket(port, txpacket)
+        except Exception as exc:
+            self._release_port(port)
+            print(f"[❌ TX 예외] 다이나믹셀 송신 중 예외 발생: {exc}")
+            return COMM_TX_FAIL
+        finally:
+            self._release_port(port)
+
+    def rxPacket(self, port, fast_option):
+        try:
+            return super().rxPacket(port, fast_option)
+        except Exception as exc:
+            self._release_port(port)
+            print(f"[❌ RX 예외] 다이나믹셀 수신 중 예외 발생: {exc}")
+            return [], COMM_RX_FAIL
+        finally:
+            self._release_port(port)
+
+    def txRxPacket(self, port, txpacket):
+        try:
+            return super().txRxPacket(port, txpacket)
+        except Exception as exc:
+            self._release_port(port)
+            print(f"[❌ TX/RX 예외] 다이나믹셀 통신 중 예외 발생: {exc}")
+            return None, COMM_TX_FAIL, 0
+        finally:
+            self._release_port(port)
+
+    def read1ByteTxRx(self, port, dxl_id, address):
+        try:
+            return super().read1ByteTxRx(port, dxl_id, address)
+        except (IndexError, TypeError):
+            # SDK가 성공 코드와 함께 길이가 부족한 상태 패킷을 돌려주면
+            # 내부에서 data[0] 접근 중 예외가 발생할 수 있습니다.
+            self._release_port(port)
+            return 0, COMM_RX_FAIL, 0
+
+    def read4ByteTxRx(self, port, dxl_id, address):
+        try:
+            return super().read4ByteTxRx(port, dxl_id, address)
+        except (IndexError, TypeError):
+            # SDK의 COMM_SUCCESS 판정과 무관하게 실제 데이터가 4바이트보다
+            # 짧은 경우를 정상적인 통신 실패 반환값으로 변환합니다.
+            self._release_port(port)
+            return 0, COMM_RX_FAIL, 0
+
+
+class NoWheelSpinBox(QSpinBox):
+    """마우스 휠로 값이 우발적으로 바뀌지 않는 숫자 입력칸."""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
+
+class NoWheelSlider(QSlider):
+    """마우스 휠은 목록 스크롤에만 사용하고 관절값은 변경하지 않습니다."""
+
+    def wheelEvent(self, event):
+        event.ignore()
+
 
 # ----------------------------------------------------
 # 리스트 커스텀 항목 위젯 (1번 탭 라이브러리용)
@@ -737,6 +809,16 @@ class SDKMotionEditor(QWidget):
         
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self.anim_step)
+        self.frame_apply_timer = QTimer(self)
+        self.frame_apply_timer.setInterval(30)
+        self.frame_apply_timer.timeout.connect(self.step_frame_apply)
+        self.frame_apply_start_time = 0.0
+        self.frame_apply_duration = 0.5
+        self.frame_apply_start_angles = {}
+        self.frame_apply_target_angles = {}
+        self.frame_apply_ids = []
+        self.frame_apply_name = ""
+        self.frame_apply_on_complete = None
         self.is_playing = False
         self.current_seq_idx = 0
         self.anim_start_time = 0
@@ -780,6 +862,13 @@ class SDKMotionEditor(QWidget):
         self.sliders = {}
         self.spinboxes = {}
         self.torque_btns = {}
+        self.torque_group_btns = {}
+        self.torque_groups = {
+            "오른팔": [2, 4, 6, 8],
+            "왼팔": [3, 5, 7, 9],
+            "오른쪽 다리": [10, 13, 15, 17, 19, 21],
+            "왼쪽 다리": [12, 14, 16, 18, 20, 22],
+        }
         self.online_joints = []
         
         self.load_3d_robot_urdf()
@@ -789,7 +878,7 @@ class SDKMotionEditor(QWidget):
         actual_port = self.find_dynamixel_port()
         
         self.portHandler = PortHandler(actual_port)
-        self.packetHandler = PacketHandler(PROTOCOL_VERSION)
+        self.packetHandler = SafeProtocol2PacketHandler()
         
         # Read/Write 동기화 객체 추가
         self.groupSyncWrite = GroupSyncWrite(self.portHandler, self.packetHandler, ADDR_GOAL_POSITION, LEN_GOAL_POSITION)
@@ -961,7 +1050,7 @@ class SDKMotionEditor(QWidget):
         for test_port in existing_ports:
             print(f"  👉 테스트 중: {test_port}")
             temp_port = PortHandler(test_port)
-            temp_packet = PacketHandler(PROTOCOL_VERSION)
+            temp_packet = SafeProtocol2PacketHandler()
             
             if temp_port.openPort():
                 if temp_port.setBaudRate(BAUDRATE):
@@ -1110,6 +1199,21 @@ class SDKMotionEditor(QWidget):
         torque_master_layout.addWidget(self.btn_rescan_motors)
         left_panel.addLayout(torque_master_layout)
 
+        torque_group_layout = QHBoxLayout()
+        for group_name, joint_ids in self.torque_groups.items():
+            btn_group = QPushButton(f"{group_name} 전체 OFF")
+            btn_group.setCheckable(True)
+            btn_group.setMinimumHeight(36)
+            btn_group.setStyleSheet(
+                "background-color: #dc3545; color: white; font-weight: bold; font-size: 11pt;"
+            )
+            btn_group.toggled.connect(
+                lambda checked, name=group_name, ids=joint_ids: self.sync_torque_group(name, ids, checked)
+            )
+            self.torque_group_btns[group_name] = btn_group
+            torque_group_layout.addWidget(btn_group)
+        left_panel.addLayout(torque_group_layout)
+
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
@@ -1127,12 +1231,12 @@ class SDKMotionEditor(QWidget):
             lbl_name.setMinimumWidth(180)
             lbl_name.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 12pt;")
             
-            slider = QSlider(Qt.Horizontal)
+            slider = NoWheelSlider(Qt.Horizontal)
             slider.setRange(-180, 180)
             slider.setMinimumWidth(280) 
             slider.setEnabled(False) 
             
-            spinbox = QSpinBox()
+            spinbox = NoWheelSpinBox()
             spinbox.setRange(-180, 180)
             spinbox.setMinimumWidth(70)
             spinbox.setMinimumHeight(40)
@@ -1148,7 +1252,16 @@ class SDKMotionEditor(QWidget):
             # 🔥 GUI 작동 증명: 람다(lambda)를 통해 완벽하게 연결되어 있습니다.
             btn_torque.toggled.connect(lambda checked, j_id=joint['id']: self.sync_torque(j_id, checked))
             slider.valueChanged.connect(lambda val, j_id=joint['id']: self.sync_values(j_id, val, 'slider'))
-            spinbox.valueChanged.connect(lambda val, j_id=joint['id']: self.sync_values(j_id, val, 'spinbox'))
+            # 숫자를 입력하는 동안에는 GUI만 갱신하고, Enter를 눌렀을 때만
+            # 최종 값을 모터로 전송합니다.
+            spinbox.valueChanged.connect(
+                lambda val, j_id=joint['id']: self.sync_values(j_id, val, 'spinbox', transmit_motor=False)
+            )
+            spinbox.lineEdit().returnPressed.connect(
+                lambda j_id=joint['id'], widget=spinbox: self.sync_values(
+                    j_id, widget.value(), 'spinbox', transmit_motor=True
+                )
+            )
             
             self.sliders[joint['id']] = slider
             self.spinboxes[joint['id']] = spinbox
@@ -1198,7 +1311,14 @@ class SDKMotionEditor(QWidget):
         self.btn_add.setStyleSheet("background-color: #E6F0FA; font-weight: bold; font-size: 14pt; min-height: 50px;")
         self.btn_add.clicked.connect(self.add_frame)
         frame_layout.addWidget(self.btn_add)
-        
+
+        self.btn_load_frame = QPushButton('📂 프레임 불러오기 (각도 바로 적용)')
+        self.btn_load_frame.setStyleSheet(
+            "background-color: #007bff; color: white; font-weight: bold; font-size: 14pt; min-height: 50px;"
+        )
+        self.btn_load_frame.clicked.connect(self.apply_selected_frame)
+        frame_layout.addWidget(self.btn_load_frame)
+
         self.btn_execute = QPushButton('▶️ 단일 실행')
         self.btn_execute.setStyleSheet("background-color: #FF5722; color: white; font-weight: bold; font-size: 14pt; min-height: 50px;")
         self.btn_execute.clicked.connect(self.execute_frame)
@@ -1311,6 +1431,12 @@ class SDKMotionEditor(QWidget):
         self.btn_stop_motion.setStyleSheet("background-color: #dc3545; color: white; min-height: 40px;")
         self.btn_stop_motion.clicked.connect(self.stop_motion_sequence)
         self.btn_stop_motion.setEnabled(False)
+
+        self.btn_default_pose = QPushButton('🏠 기본자세 복귀 (천천히)')
+        self.btn_default_pose.setStyleSheet(
+            "background-color: #6f42c1; color: white; min-height: 40px; font-weight: bold;"
+        )
+        self.btn_default_pose.clicked.connect(self.return_to_default_pose)
         
         self.btn_clear_motion = QPushButton('🧹 초기화')
         self.btn_clear_motion.clicked.connect(self.clear_motion)
@@ -1326,6 +1452,7 @@ class SDKMotionEditor(QWidget):
         ctrl_layout.addWidget(self.btn_play_motion_sim)
         ctrl_layout.addWidget(self.btn_play_motion_robot)
         ctrl_layout.addWidget(self.btn_stop_motion)
+        ctrl_layout.addWidget(self.btn_default_pose)
         ctrl_layout.addSpacing(15)
         ctrl_layout.addWidget(self.btn_clear_motion)
         ctrl_layout.addWidget(self.btn_save_sequence)
@@ -1558,12 +1685,21 @@ class SDKMotionEditor(QWidget):
                                          "⚠️ 로봇이 실제로 구동됩니다!\n주변을 확인하셨습니까?",
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply != QMessageBox.Yes: return
+            self.frame_apply_timer.stop()
+            self.frame_apply_ids = []
+            self.frame_apply_on_complete = None
             if not self.prepare_real_robot_sequence():
                 return
-            self.execute_on_real_robot = True
+            self.move_to_default_pose_before_sequence()
+            return
+
+        self.start_motion_playback(real_robot=False)
+
+    def start_motion_playback(self, real_robot=False):
+        self.execute_on_real_robot = real_robot
+        if real_robot:
             self.btn_play_motion_robot.setText("🤖 구동 중...")
         else:
-            self.execute_on_real_robot = False
             self.btn_play_motion_sim.setText("▶️ 재생 중...")
 
         self.is_playing = True
@@ -1575,6 +1711,63 @@ class SDKMotionEditor(QWidget):
         self.start_angles = self.joints.copy() 
         self.anim_start_time = time.time()
         self.anim_timer.start(16) 
+
+    def find_default_pose_row(self):
+        aliases = {"기본자세", "기본", "default", "home", "homepose"}
+        fallback_row = -1
+        for row, frame in enumerate(self.frames):
+            normalized_name = "".join(str(frame.get("name", "")).lower().split())
+            if normalized_name == "기본자세":
+                return row
+            if normalized_name in aliases and fallback_row < 0:
+                fallback_row = row
+        return fallback_row
+
+    def move_to_default_pose_before_sequence(self):
+        default_row = self.find_default_pose_row()
+        if default_row < 0:
+            QMessageBox.warning(
+                self,
+                "기본자세 없음",
+                "실제 구동 전에 사용할 '기본자세' 프레임을 찾지 못했습니다.",
+            )
+            return
+
+        default_frame = self.frames[default_row]
+        default_pose = self.normalize_angles(default_frame.get("angles", {}))
+        target_ids = sorted(set(default_pose) & set(self.online_joints))
+        if not target_ids:
+            QMessageBox.warning(self, "통신 에러", "기본자세에 적용할 온라인 모터가 없습니다.")
+            return
+
+        self.frame_apply_timer.stop()
+        actual_angles = {}
+        for j_id in target_ids:
+            angle = self.read_present_angle(j_id)
+            if angle is None:
+                self.stop_motion_sequence()
+                QMessageBox.warning(self, "통신 에러", f"ID {j_id}의 현재 각도를 읽지 못해 실제 구동을 중단했습니다.")
+                return
+            actual_angles[j_id] = angle
+            self.update_joint_display(j_id, angle, update_robot=False)
+
+        default_duration = int(default_frame.get('time_ms', 1000))
+        self.frame_apply_start_angles = actual_angles
+        self.frame_apply_target_angles = {j_id: default_pose[j_id] for j_id in target_ids}
+        self.frame_apply_ids = target_ids
+        self.frame_apply_duration = max(1.5, default_duration / 1000.0)
+        self.frame_apply_start_time = time.time()
+        self.frame_apply_name = "기본자세"
+        self.frame_apply_on_complete = lambda: self.start_motion_playback(real_robot=True)
+
+        self.is_playing = False
+        self.execute_on_real_robot = False
+        self.btn_play_motion_sim.setEnabled(False)
+        self.btn_play_motion_robot.setEnabled(False)
+        self.btn_stop_motion.setEnabled(True)
+        self.update_3d_robot()
+        self.frame_apply_timer.start()
+        print(f"[🔄 기본자세 복귀] {self.frame_apply_duration:.1f}초 동안 천천히 이동한 뒤 모션을 시작합니다.")
 
     def anim_step(self):
         if not self.is_playing: return
@@ -1598,6 +1791,9 @@ class SDKMotionEditor(QWidget):
     def stop_motion_sequence(self):
         self.is_playing = False
         self.anim_timer.stop()
+        self.frame_apply_timer.stop()
+        self.frame_apply_ids = []
+        self.frame_apply_on_complete = None
         self.btn_play_motion_sim.setEnabled(True)
         self.btn_play_motion_robot.setEnabled(True)
         self.btn_stop_motion.setEnabled(False)
@@ -1790,14 +1986,23 @@ class SDKMotionEditor(QWidget):
         if not hasattr(self, 'port_opened') or not self.port_opened:
             return None
 
-        dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(
-            self.portHandler, j_id, ADDR_PRESENT_POSITION
-        )
-        if dxl_comm_result != COMM_SUCCESS:
-            print(f"[❌ Read 에러] ID {j_id} 현재 각도 읽기 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
-            return None
-        if dxl_error != 0:
-            print(f"[❌ Read 에러] ID {j_id} 상태 패킷 에러: {self.packetHandler.getRxPacketError(dxl_error)}")
+        # TxOnly 쓰기의 상태 패킷이 늦게 도착하거나 읽기 응답이 순간적으로
+        # 잘리는 경우가 있으므로 버퍼를 비운 뒤 최대 3회 다시 읽습니다.
+        for attempt in range(3):
+            if attempt > 0:
+                time.sleep(0.005)
+                self.portHandler.clearPort()
+
+            dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(
+                self.portHandler, j_id, ADDR_PRESENT_POSITION
+            )
+            if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
+                break
+        else:
+            if dxl_comm_result != COMM_SUCCESS:
+                print(f"[❌ Read 에러] ID {j_id} 현재 각도 읽기 3회 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
+            else:
+                print(f"[❌ Read 에러] ID {j_id} 상태 패킷 에러: {self.packetHandler.getRxPacketError(dxl_error)}")
             return None
 
         if j_id not in self.online_joints:
@@ -1823,6 +2028,36 @@ class SDKMotionEditor(QWidget):
         return torque_value == 1
 
     # 🚀 [원인 분석 및 해결] 23개 모터 응답 충돌(Incorrect status packet)을 막기 위해 TxOnly 사용!
+    def sync_torque_group(self, group_name, joint_ids, is_on):
+        print(f"👉 [그룹 토크] {group_name} 모터 전체 {'ON' if is_on else 'OFF'} 요청")
+
+        for j_id in joint_ids:
+            btn = self.torque_btns.get(j_id)
+            if btn is not None and btn.isChecked() != is_on:
+                # 기존 개별 토크 안전 절차(현재 위치 동기화 포함)를 그대로 사용합니다.
+                btn.setChecked(is_on)
+
+        self.update_torque_group_buttons()
+
+    def update_torque_group_buttons(self):
+        for group_name, joint_ids in self.torque_groups.items():
+            btn_group = self.torque_group_btns.get(group_name)
+            if btn_group is None:
+                continue
+
+            all_on = all(
+                j_id in self.torque_btns and self.torque_btns[j_id].isChecked()
+                for j_id in joint_ids
+            )
+            btn_group.blockSignals(True)
+            btn_group.setChecked(all_on)
+            btn_group.setText(f"{group_name} 전체 {'ON' if all_on else 'OFF'}")
+            btn_group.setStyleSheet(
+                ("background-color: #28a745;" if all_on else "background-color: #dc3545;")
+                + " color: white; font-weight: bold; font-size: 11pt;"
+            )
+            btn_group.blockSignals(False)
+
     def sync_torque(self, j_id, is_on):
         print(f"👉 [GUI 작동 감지] {j_id}번 모터 토크 {'ON' if is_on else 'OFF'} 스위치 조작됨!")
         
@@ -1830,6 +2065,10 @@ class SDKMotionEditor(QWidget):
 
         if hasattr(self, 'port_opened') and self.port_opened:
             if is_on:
+                # 직전 OFF/Goal TxOnly 명령에 대한 늦은 상태 패킷을 제거합니다.
+                time.sleep(0.005)
+                self.portHandler.clearPort()
+
                 # 토크 ON 전 실제 Present Position을 먼저 읽어 GUI와 Goal Position을 맞춥니다.
                 # 시작 시 online_joints 감지가 비어 있어도 여기서 직접 읽기를 시도합니다.
                 angle_deg = self.read_present_angle(j_id)
@@ -1861,10 +2100,19 @@ class SDKMotionEditor(QWidget):
                     QMessageBox.warning(self, "통신 에러", f"ID {j_id} 모터의 Goal Position 선등록에 실패해 토크 ON을 중단했습니다.")
                     return
 
+                # Goal Position 쓰기 응답이 다음 Torque 쓰기와 섞이지 않게 비웁니다.
+                time.sleep(0.005)
+                self.portHandler.clearPort()
+
                 print(f"   [🔄 동기화 완료] 개별 토크 ON 전 실제 각도 {angle_deg}도 획득 및 Goal 선매핑")
 
             torque_val = 1 if is_on else 0
             dxl_comm_result = self.packetHandler.write1ByteTxOnly(self.portHandler, j_id, ADDR_TORQUE_ENABLE, torque_val)
+
+            # 모터의 Status Return Level 설정에 따라 TxOnly에도 응답이 올 수
+            # 있으므로 다음 읽기 전에 남지 않도록 수신 버퍼를 정리합니다.
+            time.sleep(0.005)
+            self.portHandler.clearPort()
             
             if dxl_comm_result != COMM_SUCCESS:
                 print(f"[❌ TX 에러] ID {j_id} 토크 제어 전송 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
@@ -1880,9 +2128,15 @@ class SDKMotionEditor(QWidget):
         btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; border-radius: 4px;" if is_on else "background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
         self.sliders[j_id].setEnabled(is_on)
         self.spinboxes[j_id].setEnabled(is_on)
+        self.update_torque_group_buttons()
 
     # 🚀 [원인 분석 및 해결] 드래그 시 대량 패킷 충돌 방지를 위해 TxOnly 사용!
-    def sync_values(self, joint_id, value, source):
+    def sync_values(self, joint_id, value, source, transmit_motor=True):
+        if transmit_motor and self.frame_apply_timer.isActive():
+            self.frame_apply_timer.stop()
+            self.frame_apply_ids = []
+            self.frame_apply_on_complete = None
+
         self.joints[joint_id] = value
         if source == 'slider':
             self.spinboxes[joint_id].blockSignals(True)
@@ -1894,7 +2148,8 @@ class SDKMotionEditor(QWidget):
             self.sliders[joint_id].blockSignals(False)
         self.update_3d_robot()
         
-        if self.torque_btns[joint_id].isChecked() and hasattr(self, 'port_opened') and self.port_opened:
+        if (transmit_motor and self.torque_btns[joint_id].isChecked()
+                and hasattr(self, 'port_opened') and self.port_opened):
             dxl_goal_position = self.angle_to_dxl_position(value)
             
             # TxRx 대신 TxOnly 적용
@@ -2053,6 +2308,8 @@ class SDKMotionEditor(QWidget):
             else:
                 print(f"   [✅ 발송 완료] 현재 각도 읽기에 성공한 {len(read_success_ids)}개 관절에 잠금 명령 쐈습니다!")
 
+        self.update_torque_group_buttons()
+
     def set_all_torque_off(self):
         print("👉 [GUI 작동 감지] 전체 토크 OFF 버튼 눌림!")
         if not self.port_opened: return
@@ -2076,6 +2333,8 @@ class SDKMotionEditor(QWidget):
                 print(f"[❌ 에러] 전체 토크 OFF 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             else:
                 print(f"[✅ 발송 완료] 감지된 {len(self.online_joints)}개 모터에 티칭(늘어짐) 명령 쐈습니다!")
+
+        self.update_torque_group_buttons()
 
     def sync_drag_selection(self):
         if not self.is_select_mode: return
@@ -2102,6 +2361,117 @@ class SDKMotionEditor(QWidget):
         if self.port_opened and any(btn.isChecked() for btn in self.torque_btns.values()):
             self.write_goal_positions(angles)
         QMessageBox.information(self, "실행 완료", f"로봇이 '{frame['name']}' 자세로 이동합니다!")
+
+    def apply_selected_frame(self):
+        row = self.frame_list_ui1.currentRow()
+        if row < 0 or row >= len(self.frames):
+            QMessageBox.warning(self, "경고", "불러올 프레임을 목록에서 선택하세요.")
+            return
+
+        frame = self.frames[row]
+        angles = self.normalize_angles(frame.get("angles", {}))
+        if not angles:
+            QMessageBox.warning(self, "경고", "선택한 프레임에 적용할 각도 데이터가 없습니다.")
+            return
+
+        if self.is_playing:
+            self.stop_motion_sequence()
+
+        # 저장 시간이 짧아도 실제 로봇은 최소 1초 동안 이동시켜 급격한
+        # 자세 변화를 방지합니다. 더 느리게 하려면 프레임 이동 시간을 늘립니다.
+        duration_ms = max(1000, int(frame.get("time_ms", 500)))
+        self.time_spinbox.setValue(int(frame.get("time_ms", 500)))
+
+        # 저장 당시 토크 상태를 강제로 복원하지 않고, 현재 사용자가 켜 둔
+        # 온라인 모터에만 저장 각도를 적용합니다.
+        active_ids = [
+            j_id for j_id, btn in self.torque_btns.items()
+            if btn.isChecked() and j_id in self.online_joints and j_id in angles
+        ]
+        if self.port_opened and active_ids:
+            self.frame_apply_timer.stop()
+            self.frame_apply_on_complete = None
+
+            # 목록 선택 시 GUI에는 이미 목표값이 표시될 수 있으므로, 실제 모터
+            # 위치를 시작점으로 다시 읽어 갑작스러운 첫 점프를 방지합니다.
+            start_angles = {}
+            for j_id in active_ids:
+                current_angle = self.read_present_angle(j_id)
+                if current_angle is None:
+                    QMessageBox.warning(self, "통신 에러", f"ID {j_id}의 현재 각도를 읽지 못해 프레임 적용을 중단했습니다.")
+                    return
+                start_angles[j_id] = current_angle
+                self.update_joint_display(j_id, current_angle, update_robot=False)
+
+            self.frame_apply_start_angles = start_angles
+            self.frame_apply_target_angles = {j_id: angles[j_id] for j_id in active_ids}
+            self.frame_apply_ids = active_ids
+            self.frame_apply_duration = duration_ms / 1000.0
+            self.frame_apply_start_time = time.time()
+            self.frame_apply_name = frame["name"]
+            self.update_3d_robot()
+            self.frame_apply_timer.start()
+            print(f"[🔄 프레임 이동 시작] '{frame['name']}' -> {duration_ms}ms 동안 부드럽게 이동")
+        else:
+            for j_id, angle in angles.items():
+                self.update_joint_display(j_id, angle, update_robot=False)
+            self.update_3d_robot()
+            print(f"[ℹ️ 프레임 불러오기] '{frame['name']}' 각도를 GUI에 적용했습니다. 토크 ON 모터는 없습니다.")
+
+    def return_to_default_pose(self):
+        default_row = self.find_default_pose_row()
+
+        if default_row < 0:
+            QMessageBox.warning(
+                self,
+                "기본자세 없음",
+                "저장된 프레임에서 '기본자세'를 찾지 못했습니다.\n기본으로 사용할 프레임 이름을 '기본자세'로 변경해 주세요.",
+            )
+            return
+
+        self.frame_list_ui1.setCurrentRow(default_row)
+        self.apply_selected_frame()
+
+    def step_frame_apply(self):
+        if not self.frame_apply_ids:
+            self.frame_apply_timer.stop()
+            return
+
+        progress = min(1.0, (time.time() - self.frame_apply_start_time) / self.frame_apply_duration)
+        # 시작과 끝에서 속도가 서서히 변하는 smoothstep 보간으로 충격을 줄입니다.
+        eased = progress * progress * (3.0 - 2.0 * progress)
+        intermediate = {
+            j_id: self.interpolate_angle_shortest(
+                self.frame_apply_start_angles[j_id],
+                self.frame_apply_target_angles[j_id],
+                eased,
+            )
+            for j_id in self.frame_apply_ids
+        }
+
+        if not self.write_goal_positions(intermediate, target_ids=self.frame_apply_ids):
+            self.frame_apply_timer.stop()
+            self.frame_apply_ids = []
+            self.frame_apply_on_complete = None
+            self.btn_play_motion_sim.setEnabled(True)
+            self.btn_play_motion_robot.setEnabled(True)
+            self.btn_play_motion_robot.setText("🤖 로봇 실제 구동")
+            self.btn_stop_motion.setEnabled(False)
+            QMessageBox.warning(self, "통신 에러", "프레임 이동 중 모터 전송에 실패했습니다.")
+            return
+
+        for j_id, angle in intermediate.items():
+            self.update_joint_display(j_id, angle, update_robot=False)
+        self.update_3d_robot()
+
+        if progress >= 1.0:
+            self.frame_apply_timer.stop()
+            print(f"[✅ 프레임 이동 완료] '{self.frame_apply_name}' 자세 적용 완료")
+            self.frame_apply_ids = []
+            on_complete = self.frame_apply_on_complete
+            self.frame_apply_on_complete = None
+            if on_complete is not None:
+                on_complete()
 
     def load_frame_to_ui(self, row):
         if row < 0 or row >= len(self.frames): return
