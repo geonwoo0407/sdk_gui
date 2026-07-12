@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import struct
+import uuid
 import xml.etree.ElementTree as ET
 # 아무거나나ㅏㅏㅏ
 
@@ -22,7 +23,7 @@ for name in dir(collections.abc):
 
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, 
                              QSlider, QLabel, QPushButton, QListWidget, QFileDialog, 
-                             QSpinBox, QGroupBox, QScrollArea, QFrame, QInputDialog, 
+                             QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QFrame, QInputDialog,
                              QTabWidget, QMessageBox, QGridLayout, QCheckBox, QListWidgetItem, QAbstractItemView,
                              QOpenGLWidget)
 from PyQt5.QtCore import Qt, QTimer
@@ -55,6 +56,7 @@ DXL_MAX_DEG                 = (DXL_MAX_POSITION - DXL_CENTER_POSITION) * DXL_DEG
 # 0이면 STL을 줄이지 않고 원본 mesh를 렌더링합니다. 중간 샘플링은 표면이 찢어져 보여서 기본은 원본 유지.
 MAX_RENDER_TRIANGLES_PER_MESH = 0
 STATE_FILENAME = "sdk_gui_state.json"
+MIN_TIMELINE_FRAME_MS = 10
 
 
 class SafeProtocol2PacketHandler(Protocol2PacketHandler):
@@ -177,7 +179,9 @@ class TimelineBlockWidget(QFrame):
 
         self.setFrameShape(QFrame.StyledPanel)
         self.set_default_style()
-        self.setMinimumWidth(60)
+        # 블록의 실제 픽셀 폭이 곧 시간 폭입니다. 고정 60px 최소 폭은 짧은
+        # 프레임을 약 160~240ms처럼 보이게 하고 이웃 블록 위에 덮어씌웠습니다.
+        self.setMinimumWidth(1)
         
         self.setMouseTracking(True) 
         self.EDGE_MARGIN = 15 
@@ -203,9 +207,22 @@ class TimelineBlockWidget(QFrame):
         self.spinbox.setValue(frame_data['time_ms'])
         self.spinbox.setSuffix(" ms")
         self.spinbox.setStyleSheet("font-size: 10pt; border: 1px solid #777; background: #222; color: white; padding: 2px;")
-        self.spinbox.valueChanged.connect(self.on_spinbox_changed)
+        # 숫자를 입력하는 도중에는 블록 길이를 바꾸지 않고 Enter로 확정합니다.
+        self.spinbox.setKeyboardTracking(False)
+        self.spinbox.lineEdit().returnPressed.connect(self.apply_spinbox_time)
+
+        self.gap_spinbox = QSpinBox()
+        self.gap_spinbox.setRange(0, self.parent_gui.max_seq_ms)
+        self.gap_spinbox.setValue(self.parent_gui.frame_gap_ms(frame_data))
+        self.gap_spinbox.setSuffix(" ms 앞 프레임 간격")
+        self.gap_spinbox.setKeyboardTracking(False)
+        self.gap_spinbox.setStyleSheet(
+            "font-size: 9pt; border: 1px solid #777; background: #222; color: #ffd54f; padding: 1px;"
+        )
+        self.gap_spinbox.lineEdit().returnPressed.connect(self.apply_gap_time)
         
         layout.addLayout(top_layout)
+        layout.addWidget(self.gap_spinbox)
         layout.addWidget(self.spinbox)
         layout.addStretch() 
         
@@ -219,8 +236,7 @@ class TimelineBlockWidget(QFrame):
 
     def calculate_bounds(self):
         seq = sorted(self.parent_gui.motion_sequence, key=lambda x: x['start_ms'])
-        try: idx = seq.index(self.frame_data)
-        except ValueError: idx = -1
+        idx = next((i for i, frame in enumerate(seq) if frame is self.frame_data), -1)
 
         self.resize_min_x = 0
         if idx > 0:
@@ -232,11 +248,18 @@ class TimelineBlockWidget(QFrame):
             next_f = seq[idx+1]
             self.resize_max_x = int(next_f['start_ms'] * self.parent_gui.SCALE)
 
+        self.move_min_x = self.resize_min_x
+        self.move_max_x = self.resize_max_x - self.width()
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            if event.x() < self.EDGE_MARGIN: self.drag_mode = 'resize_left'
-            elif event.x() > self.width() - self.EDGE_MARGIN: self.drag_mode = 'resize_right'
+            edge_margin = min(self.EDGE_MARGIN, max(1, self.width() // 3))
+            if event.x() < edge_margin: self.drag_mode = 'resize_left'
+            elif event.x() >= self.width() - edge_margin: self.drag_mode = 'resize_right'
             else: self.drag_mode = 'move'
+
+            if self.drag_mode == 'move':
+                self.frame_data['_drag_original_start_ms'] = self.frame_data['start_ms']
                 
             self.drag_start_global_x = event.globalX()
             self.start_x = self.x()
@@ -246,7 +269,8 @@ class TimelineBlockWidget(QFrame):
 
     def mouseMoveEvent(self, event):
         if not self.drag_mode:
-            if event.x() < self.EDGE_MARGIN or event.x() > self.width() - self.EDGE_MARGIN:
+            edge_margin = min(self.EDGE_MARGIN, max(1, self.width() // 3))
+            if event.x() < edge_margin or event.x() >= self.width() - edge_margin:
                 self.setCursor(Qt.SizeHorCursor) 
             else:
                 self.setCursor(Qt.ArrowCursor)   
@@ -264,7 +288,8 @@ class TimelineBlockWidget(QFrame):
         elif self.drag_mode == 'resize_right':
             new_w = self.start_w + delta_x
             max_w = self.resize_max_x - self.start_x
-            new_w = max(40, min(new_w, max_w)) 
+            min_w = max(1, int(math.ceil(MIN_TIMELINE_FRAME_MS * self.parent_gui.SCALE)))
+            new_w = max(min_w, min(new_w, max_w))
             self.resize(new_w, self.height())
             
             new_time_ms = int(new_w / self.parent_gui.SCALE)
@@ -282,8 +307,9 @@ class TimelineBlockWidget(QFrame):
                 new_x += diff
                 new_w -= diff
             
-            if new_w < 40:
-                diff = 40 - new_w
+            min_w = max(1, int(math.ceil(MIN_TIMELINE_FRAME_MS * self.parent_gui.SCALE)))
+            if new_w < min_w:
+                diff = min_w - new_w
                 new_w += diff
                 new_x -= diff
                 
@@ -300,9 +326,13 @@ class TimelineBlockWidget(QFrame):
 
     def mouseReleaseEvent(self, event):
         if self.drag_mode:
+            released_mode = self.drag_mode
             self.drag_mode = None
             self.setCursor(Qt.ArrowCursor)
-            self.parent_gui.resort_motion_sequence()
+            if released_mode == 'move':
+                self.parent_gui.reorder_motion_frame(self.frame_data, self.x())
+            else:
+                self.parent_gui.resort_motion_sequence()
             self.parent_gui.refresh_timeline_ui()
 
     def clamp_time_val(self, val):
@@ -310,12 +340,26 @@ class TimelineBlockWidget(QFrame):
         max_allowed_ms = int((self.resize_max_x - self.x()) / self.parent_gui.SCALE)
         return min(val, max_allowed_ms)
 
-    def on_spinbox_changed(self, val):
+    def apply_spinbox_time(self):
+        self.spinbox.interpretText()
+        val = self.spinbox.value()
         val = self.clamp_time_val(val) 
         self.spinbox.blockSignals(True)
         self.spinbox.setValue(val)
         self.spinbox.blockSignals(False)
         self.frame_data['time_ms'] = val
+        self.parent_gui.refresh_timeline_ui()
+
+    def apply_gap_time(self):
+        self.gap_spinbox.interpretText()
+        requested_gap = self.gap_spinbox.value()
+        previous_end = self.parent_gui.previous_frame_end_ms(self.frame_data)
+        requested_start = previous_end + requested_gap
+        self.frame_data['_drag_original_start_ms'] = self.frame_data['start_ms']
+        self.parent_gui.reorder_motion_frame(
+            self.frame_data,
+            int(requested_start * self.parent_gui.SCALE),
+        )
         self.parent_gui.refresh_timeline_ui()
 
     def on_delete(self):
@@ -349,17 +393,19 @@ class TimelineContainer(QWidget):
         max_w = int(self.parent_gui.max_seq_ms * self.parent_gui.SCALE)
         painter.drawLine(0, y_axis, max_w, y_axis) 
         
-        tick_interval_ms = 100
+        # 확대 상태에서는 10ms 단위 눈금을 표시해 짧은 프레임도 정밀 배치합니다.
+        tick_interval_ms = 10 if self.parent_gui.SCALE >= 0.75 else 50
+        label_interval_ms = 100 if self.parent_gui.SCALE >= 0.75 else 500
         current_ms = 0
         
         while current_ms <= self.parent_gui.max_seq_ms:
             x = int(current_ms * self.parent_gui.SCALE)
-            if current_ms % 1000 == 0:
+            if current_ms % label_interval_ms == 0:
                 painter.drawLine(x, y_axis - 10, x, y_axis)
                 painter.setPen(QColor(200, 200, 200))
-                painter.drawText(x + 5, y_axis - 5, f"{current_ms / 1000.0:.1f}s")
+                painter.drawText(x + 3, y_axis - 5, f"{current_ms}ms")
                 painter.setPen(pen_axis)
-            elif current_ms % 500 == 0:
+            elif current_ms % 100 == 0:
                 painter.drawLine(x, y_axis - 6, x, y_axis)
             else:
                 painter.drawLine(x, y_axis - 3, x, y_axis)
@@ -373,21 +419,155 @@ class TimelineContainer(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.parent_gui.stop_motion_sequence() 
+            if self.parent_gui.is_playing:
+                self.parent_gui.pause_motion_sequence()
             self.scrub(event.x())
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.LeftButton:
             self.scrub(event.x())
 
-    def scrub(self, x):
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # 마지막 목표 자세도 완만한 로봇 추종기에 전달합니다.
+            self.scrub(event.x())
+
+    def scrub(self, x, force_robot=False):
         max_w = int(self.parent_gui.max_seq_ms * self.parent_gui.SCALE)
         x = max(0, min(x, max_w))
         self.set_playhead(True, x)
         t_ms = int(x / self.parent_gui.SCALE)
-        self.parent_gui.scrub_timeline(t_ms)
+        self.parent_gui.scrub_timeline(t_ms, force_robot=force_robot)
 
     def dragEnterEvent(self, event):
+        event.accept()
+
+
+class SequenceTimelineBlockWidget(QFrame):
+    """3페이지에서 저장 시퀀스 하나를 나타내는 타임라인 블록."""
+
+    def __init__(self, entry, index, parent_gui):
+        super().__init__()
+        self.entry = entry
+        self.index = index
+        self.parent_gui = parent_gui
+        self.drag_start_global_x = 0
+        self.start_x = 0
+
+        self.setStyleSheet(
+            "SequenceTimelineBlockWidget { background-color: #5e35b1; "
+            "border: 2px solid #9575cd; border-radius: 6px; }"
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        top = QHBoxLayout()
+        label = QLabel(f"[{index + 1}] {entry['name']}")
+        label.setStyleSheet("color: white; font-weight: bold; font-size: 11pt;")
+        delete_button = QPushButton("❌")
+        delete_button.setFixedWidth(24)
+        delete_button.setStyleSheet("background: transparent; border: none; color: #ff8a80;")
+        delete_button.clicked.connect(lambda: self.parent_gui.remove_sequence_composer_entry(self.index))
+        top.addWidget(label)
+        top.addStretch()
+        top.addWidget(delete_button)
+        duration = QLabel(f"{entry['time_ms']}ms / {entry['frame_count']} 프레임")
+        duration.setStyleSheet("color: white;")
+        layout.addLayout(top)
+        layout.addWidget(duration)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_global_x = event.globalX()
+            self.start_x = self.x()
+            self.raise_()
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton:
+            new_x = self.start_x + event.globalX() - self.drag_start_global_x
+            max_x = max(0, self.parent_gui.composer_timeline_width() - self.width())
+            self.move(max(0, min(new_x, max_x)), self.y())
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.parent_gui.reorder_sequence_composer_entry(self.entry, self.x())
+
+
+class SequenceTimelineContainer(QWidget):
+    def __init__(self, parent_gui):
+        super().__init__()
+        self.parent_gui = parent_gui
+        self.show_playhead = False
+        self.playhead_x = 0
+        self.setAcceptDrops(True)
+
+    def set_playhead(self, show, x=0):
+        self.show_playhead = show
+        self.playhead_x = x
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        axis_pen = QPen(QColor(120, 120, 120))
+        axis_pen.setWidth(2)
+        painter.setPen(axis_pen)
+        painter.drawLine(0, 30, self.parent_gui.composer_timeline_width(), 30)
+        duration = self.parent_gui.composer_total_duration()
+        tick = 100
+        current = 0
+        while current <= duration:
+            x = int(current * self.parent_gui.COMPOSER_SCALE)
+            if current % 500 == 0:
+                painter.drawLine(x, 20, x, 30)
+                painter.drawText(x + 3, 16, f"{current}ms")
+            else:
+                painter.drawLine(x, 26, x, 30)
+            current += tick
+        if self.show_playhead:
+            playhead_pen = QPen(QColor(255, 152, 0))
+            playhead_pen.setWidth(3)
+            painter.setPen(playhead_pen)
+            painter.drawLine(self.playhead_x, 0, self.playhead_x, self.height())
+
+    def dragEnterEvent(self, event):
+        event.accept()
+
+    def dragMoveEvent(self, event):
+        event.accept()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            if self.parent_gui.is_playing:
+                self.parent_gui.pause_motion_sequence()
+            self.scrub(event.x())
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton:
+            self.scrub(event.x())
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.scrub(event.x())
+
+    def scrub(self, x):
+        if not self.parent_gui.sequence_composer_entries:
+            return
+        if self.parent_gui.playback_context != "composer":
+            if not self.parent_gui.activate_composer_playback():
+                return
+        max_x = int(self.parent_gui.composer_total_duration() * self.parent_gui.COMPOSER_SCALE)
+        x = max(0, min(x, max_x))
+        self.set_playhead(True, x)
+        self.parent_gui.scrub_timeline(int(x / self.parent_gui.COMPOSER_SCALE))
+
+    def dropEvent(self, event):
+        item = self.parent_gui.composer_source_list.currentItem()
+        if item is None:
+            return
+        self.parent_gui.add_sequence_to_composer(
+            sequence_idx=item.data(Qt.UserRole),
+            drop_x=event.pos().x(),
+        )
         event.accept()
 
     def dragMoveEvent(self, event):
@@ -403,13 +583,18 @@ class TimelineContainer(QWidget):
         for item in selected_items:
             original_idx = item.data(Qt.UserRole)
             new_frame = copy.deepcopy(self.parent_gui.frames[original_idx])
-            if new_frame['time_ms'] < 40: new_frame['time_ms'] = 40
+            new_frame['time_ms'] = max(MIN_TIMELINE_FRAME_MS, new_frame['time_ms'])
             
             new_frame['start_ms'] = start_ms
             self.parent_gui.motion_sequence.append(new_frame)
-            start_ms += new_frame['time_ms'] 
+            placed = self.parent_gui.reorder_motion_frame(
+                new_frame, int(start_ms * self.parent_gui.SCALE)
+            )
+            if not placed:
+                QMessageBox.warning(self, "공간 부족", "겹치지 않고 배치할 빈 공간이 없습니다.")
+                break
+            start_ms = new_frame['start_ms'] + new_frame['time_ms']
 
-        self.parent_gui.resort_motion_sequence()
         self.parent_gui.refresh_timeline_ui()
         self.parent_gui.frame_list_all.clearSelection()
         event.accept()
@@ -797,7 +982,8 @@ class URDFGLViewer(QOpenGLWidget):
 class SDKMotionEditor(QWidget):
     def __init__(self):
         super().__init__()
-        self.SCALE = 0.25  
+        # 1ms = 1px가 기본값입니다. 가로 스크롤로 10ms 프레임까지 편집합니다.
+        self.SCALE = 1.0
         self.max_seq_ms = 5000 
         
         self.frames = []          
@@ -809,6 +995,17 @@ class SDKMotionEditor(QWidget):
         
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self.anim_step)
+        self.live_angle_timer = QTimer(self)
+        self.live_angle_timer.setInterval(100)
+        self.live_angle_timer.timeout.connect(self.refresh_live_joint_angles)
+        self.live_angle_read_failures = 0
+        self.robot_scrub_timer = QTimer(self)
+        self.robot_scrub_timer.setInterval(30)
+        self.robot_scrub_timer.timeout.connect(self.step_robot_scrub)
+        self.robot_scrub_target_angles = {}
+        self.robot_scrub_command_angles = {}
+        self.robot_scrub_last_time = 0.0
+        self.robot_scrub_speed_deg_per_sec = 45.0
         self.frame_apply_timer = QTimer(self)
         self.frame_apply_timer.setInterval(30)
         self.frame_apply_timer.timeout.connect(self.step_frame_apply)
@@ -820,12 +1017,20 @@ class SDKMotionEditor(QWidget):
         self.frame_apply_name = ""
         self.frame_apply_on_complete = None
         self.is_playing = False
+        self.is_paused = False
+        self.playback_context = "motion"
+        self.composer_motion_backup = None
+        self.playback_repeat_target = 1
+        self.playback_repeat_current = 1
+        self.playback_speed = 1.0
+        self.current_timeline_ms = 0
         self.current_seq_idx = 0
         self.anim_start_time = 0
         self.anim_duration = 0
         self.start_angles = {}
         
         self.execute_on_real_robot = False
+        self.robot_sync_enabled = False
         self.last_robot_write_time = 0
         
         self.joint_data = [
@@ -835,9 +1040,9 @@ class SDKMotionEditor(QWidget):
             {"id": 6, "name": "R_Elbow_Pitch", "type": "28"}, {"id": 7, "name": "L_Elbow_Pitch", "type": "28"},
             {"id": 8, "name": "R_Wrist_Yaw", "type": "28"}, {"id": 9, "name": "L_Wrist_Yaw", "type": "28"},
             {"id": 10, "name": "R_Hip_Yaw", "type": "106"}, {"id": 11, "name": "Waist_Yaw", "type": "106"},      
-            {"id": 12, "name": "L_Hip_Yaw", "type": "106"}, {"id": 13, "name": "R_Hip_Roll", "type": "106"},
-            {"id": 14, "name": "L_Hip_Roll", "type": "106"}, {"id": 15, "name": "R_Hip_Pitch", "type": "106"},
-            {"id": 16, "name": "L_Hip_Pitch", "type": "106"}, {"id": 17, "name": "R_Knee_Pitch", "type": "106"},
+            {"id": 12, "name": "L_Hip_Yaw", "type": "106"}, {"id": 15, "name": "R_Hip_Roll", "type": "106"},
+            {"id": 16, "name": "L_Hip_Roll", "type": "106"}, {"id": 13, "name": "R_Hip_Pitch", "type": "106"},
+            {"id": 14, "name": "L_Hip_Pitch", "type": "106"}, {"id": 17, "name": "R_Knee_Pitch", "type": "106"},
             {"id": 18, "name": "L_Knee_Pitch", "type": "106"}, {"id": 19, "name": "R_Ankle_Pitch", "type": "106"},
             {"id": 20, "name": "L_Ankle_Pitch", "type": "106"}, {"id": 21, "name": "R_Ankle_Roll", "type": "106"},
             {"id": 22, "name": "L_Ankle_Roll", "type": "106"}
@@ -847,8 +1052,8 @@ class SDKMotionEditor(QWidget):
             0: "Neck_yaw", 1: "Neck_pitch", 2: "R_Arm_shoulder_yaw", 3: "L_Arm_shoulder_yaw",
             4: "R_Arm_pitch", 5: "L_Arm_pitch", 6: "R_Arm_elbow", 7: "L_Arm_elbow",
             8: "R_arm_hand", 9: "L_Arm_hand", 10: "R_Leg_hip_yaw", 11: "Waist",
-            12: "L_Leg_hip_yaw", 13: "R_Leg_hip_roll", 14: "L_Leg_hip_roll",
-            15: "R_Leg_hip_pitch", 16: "L_Leg_hip_pitch", 17: "R_Leg_knee",
+            12: "L_Leg_hip_yaw", 15: "R_Leg_hip_roll", 16: "L_Leg_hip_roll",
+            13: "R_Leg_hip_pitch", 14: "L_Leg_hip_pitch", 17: "R_Leg_knee",
             18: "L_Leg_knee", 19: "R_Leg_ankle_pitch", 20: "L_Leg_ankle_pitch",
             21: "R_Leg_ankle_roll", 22: "L_Leg_ankle_roll"
         }
@@ -912,6 +1117,10 @@ class SDKMotionEditor(QWidget):
 
             # 🚨 로봇이 튀지 않도록 완전히 릴랙스된 티칭(토크 OFF) 상태로 프로그램을 켭니다.
             self.set_all_torque_off()
+
+            # 토크 상태와 무관하게 Present Position을 계속 읽어 프레임 제작
+            # 화면의 각도값을 실제 관절 위치로 유지합니다.
+            self.live_angle_timer.start()
         else:
             self.lbl_conn_status.setText(f"🔴 연결 실패 (포트/권한 확인)")
             self.lbl_conn_status.setStyleSheet("font-weight: bold; font-size: 14pt; background-color: #5c1d1d; color: #ff5252; padding: 8px; border-radius: 5px; margin-bottom: 5px;")
@@ -959,6 +1168,37 @@ class SDKMotionEditor(QWidget):
             self.update_3d_robot()
         else:
             print(f"   [⚠️ 경고] 기동 시 로봇 각도 읽기 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
+
+    def refresh_live_joint_angles(self):
+        """토크 ON/OFF와 무관하게 온라인 관절의 실제 각도를 갱신합니다."""
+        if not self.port_opened or not self.online_joints:
+            return
+
+        self.groupSyncRead.clearParam()
+        for j_id in self.online_joints:
+            self.groupSyncRead.addParam(j_id)
+
+        dxl_comm_result = self.groupSyncRead.txRxPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            self.live_angle_read_failures += 1
+            # 일시적인 패킷 충돌은 다음 100ms 주기에 복구되므로 로그 폭주를
+            # 피하고 연속 실패할 때만 상태를 알립니다.
+            if self.live_angle_read_failures == 10:
+                print(
+                    "[⚠️ 실시간 각도 갱신] 10회 연속 읽기 실패: "
+                    f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+                )
+            return
+
+        self.live_angle_read_failures = 0
+        for j_id in self.online_joints:
+            if not self.groupSyncRead.isAvailable(j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION):
+                continue
+            dxl_present_position = self.groupSyncRead.getData(
+                j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
+            )
+            angle_deg = self.dxl_position_to_angle(dxl_present_position)
+            self.update_joint_display(j_id, angle_deg, update_robot=False)
 
     def set_joint_connection_ui(self, j_id, is_online, torque_on=False):
         if j_id not in self.torque_btns:
@@ -1070,6 +1310,8 @@ class SDKMotionEditor(QWidget):
 
     def closeEvent(self, event):
         self.save_persistent_state()
+        if hasattr(self, 'live_angle_timer'):
+            self.live_angle_timer.stop()
         if hasattr(self, 'portHandler') and self.portHandler.is_open:
             self.portHandler.closePort()
             print("[✅ 포트 닫힘] 프로그램을 종료하여 포트를 안전하게 반납했습니다.")
@@ -1121,14 +1363,19 @@ class SDKMotionEditor(QWidget):
                 state = json.load(f)
 
             self.frames = [self.normalize_frame_data(frame) for frame in state.get("frames", [])]
+            for frame in self.frames:
+                frame.setdefault("frame_id", uuid.uuid4().hex)
             self.saved_sequences = []
             for seq in state.get("saved_sequences", []):
                 self.saved_sequences.append({
                     "name": str(seq.get("name", "Sequence")),
                     "max_seq_ms": int(seq.get("max_seq_ms", 5000)),
+                    "repeat_count": max(1, int(seq.get("repeat_count", 1))),
+                    "playback_speed": max(0.1, min(5.0, float(seq.get("playback_speed", 1.0)))),
                     "frames": [self.normalize_frame_data(frame) for frame in seq.get("frames", [])],
                 })
             self.motion_sequence = [self.normalize_frame_data(frame) for frame in state.get("motion_sequence", [])]
+            self.link_sequence_frames_to_library()
             self.max_seq_ms = int(state.get("max_seq_ms", self.max_seq_ms))
             if hasattr(self, 'spin_max_time'):
                 self.spin_max_time.setValue(self.max_seq_ms)
@@ -1139,6 +1386,24 @@ class SDKMotionEditor(QWidget):
             print(f"[✅ 자동 로드] 프레임 {len(self.frames)}개, 시퀀스 {len(self.saved_sequences)}개를 복원했습니다.")
         except Exception as e:
             print(f"[⚠️ 자동 로드 실패] {type(e).__name__}: {e}")
+
+    def link_sequence_frames_to_library(self):
+        """이전 저장 데이터의 시퀀스 프레임을 원본 라이브러리와 연결합니다."""
+        by_id = {frame.get("frame_id"): frame for frame in self.frames if frame.get("frame_id")}
+        by_name = {}
+        for frame in self.frames:
+            by_name.setdefault(frame.get("name"), []).append(frame)
+
+        collections = [self.motion_sequence]
+        collections.extend(seq.get("frames", []) for seq in self.saved_sequences)
+        for frames in collections:
+            for sequence_frame in frames:
+                frame_id = sequence_frame.get("frame_id")
+                if frame_id in by_id:
+                    continue
+                matches = by_name.get(sequence_frame.get("name"), [])
+                if len(matches) == 1:
+                    sequence_frame["frame_id"] = matches[0]["frame_id"]
 
     def load_3d_robot_urdf(self):
         self.urdf_loaded = False
@@ -1172,8 +1437,11 @@ class SDKMotionEditor(QWidget):
         self.init_frame_tab(self.tab_frame)
         self.tab_motion = QWidget()
         self.init_motion_tab(self.tab_motion)
+        self.tab_sequence_composer = QWidget()
+        self.init_sequence_composer_tab(self.tab_sequence_composer)
         self.tabs.addTab(self.tab_frame, "🎬 1. 단일 프레임 제작 (관절 제어)")
-        self.tabs.addTab(self.tab_motion, "🎞️ 2. 모션 시퀀스 조합 (프레임 이어붙이기)")
+        self.tabs.addTab(self.tab_motion, "🎞️ 2. 모션 제작 (프레임 이어붙이기)")
+        self.tabs.addTab(self.tab_sequence_composer, "🧩 3. 시퀀스 조합 (시퀀스 이어붙이기)")
         main_layout.addWidget(self.tabs)
         self.setLayout(main_layout)
 
@@ -1380,7 +1648,22 @@ class SDKMotionEditor(QWidget):
         self.sequence_list_ui.itemDoubleClicked.connect(self.load_sequence_from_list_item)
         
         sequence_layout.addWidget(lbl_sequence)
+        self.lbl_loaded_sequence = QLabel("현재 타임라인: 새 시퀀스")
+        self.lbl_loaded_sequence.setStyleSheet("color: #00897b; font-weight: bold;")
+        sequence_layout.addWidget(self.lbl_loaded_sequence)
         sequence_layout.addWidget(self.sequence_list_ui)
+        self.btn_load_saved_sequence = QPushButton("📥 선택 시퀀스를 타임라인에 불러오기")
+        self.btn_load_saved_sequence.setStyleSheet(
+            "background-color: #6f42c1; color: white; font-weight: bold;"
+        )
+        self.btn_load_saved_sequence.clicked.connect(self.load_selected_sequence_to_timeline)
+        sequence_layout.addWidget(self.btn_load_saved_sequence)
+        self.btn_delete_saved_sequence = QPushButton("🗑️ 선택 시퀀스 삭제")
+        self.btn_delete_saved_sequence.setStyleSheet(
+            "background-color: #dc3545; color: white; font-weight: bold;"
+        )
+        self.btn_delete_saved_sequence.clicked.connect(self.delete_selected_saved_sequence)
+        sequence_layout.addWidget(self.btn_delete_saved_sequence)
         
         all_layout = QVBoxLayout()
         lbl_all = QLabel("📁 전체 프레임")
@@ -1419,25 +1702,49 @@ class SDKMotionEditor(QWidget):
         ctrl_group.setStyleSheet("font-weight: bold; font-size: 13pt;")
         ctrl_layout = QHBoxLayout()
         
-        self.btn_play_motion_sim = QPushButton('▶️ 시뮬레이션 재생')
-        self.btn_play_motion_sim.setStyleSheet("background-color: #ff9800; color: white; min-height: 40px;")
-        self.btn_play_motion_sim.clicked.connect(lambda: self.play_motion_sequence(real_robot=False))
-        
-        self.btn_play_motion_robot = QPushButton('🤖 로봇 실제 구동')
-        self.btn_play_motion_robot.setStyleSheet("background-color: #e91e63; color: white; min-height: 40px; font-weight: bold;")
-        self.btn_play_motion_robot.clicked.connect(lambda: self.play_motion_sequence(real_robot=True))
-        
+        self.btn_keyframe_play = QPushButton('▶️ 재생')
+        self.btn_keyframe_play.setStyleSheet("background-color: #ff9800; color: white; min-height: 40px; font-weight: bold;")
+        self.btn_keyframe_play.clicked.connect(self.play_motion_page_sequence)
+
+        self.btn_keyframe_pause = QPushButton('⏸️ 일시정지')
+        self.btn_keyframe_pause.setStyleSheet("background-color: #607d8b; color: white; min-height: 40px; font-weight: bold;")
+        self.btn_keyframe_pause.clicked.connect(self.pause_motion_sequence)
+        self.btn_keyframe_pause.setEnabled(False)
+
         self.btn_stop_motion = QPushButton('⏹️ 정지')
         self.btn_stop_motion.setStyleSheet("background-color: #dc3545; color: white; min-height: 40px;")
         self.btn_stop_motion.clicked.connect(self.stop_motion_sequence)
         self.btn_stop_motion.setEnabled(False)
+
+        self.btn_robot_sync = QPushButton('🤖 로봇 동기화: OFF')
+        self.btn_robot_sync.setCheckable(True)
+        self.btn_robot_sync.setStyleSheet(
+            "QPushButton { background-color: #555; color: white; min-height: 40px; font-weight: bold; }"
+            "QPushButton:checked { background-color: #e91e63; }"
+        )
+        self.btn_robot_sync.toggled.connect(self.toggle_robot_sync)
+
+        repeat_label = QLabel("반복:")
+        self.spin_motion_repeat = QSpinBox()
+        self.spin_motion_repeat.setRange(1, 999)
+        self.spin_motion_repeat.setValue(1)
+        self.spin_motion_repeat.setSuffix(" 회")
+        self.spin_motion_repeat.setMinimumWidth(85)
+        speed_label = QLabel("배속:")
+        self.spin_motion_speed = QDoubleSpinBox()
+        self.spin_motion_speed.setRange(0.1, 5.0)
+        self.spin_motion_speed.setDecimals(1)
+        self.spin_motion_speed.setSingleStep(0.1)
+        self.spin_motion_speed.setValue(1.0)
+        self.spin_motion_speed.setSuffix("x")
+        self.spin_motion_speed.setMinimumWidth(90)
 
         self.btn_default_pose = QPushButton('🏠 기본자세 복귀 (천천히)')
         self.btn_default_pose.setStyleSheet(
             "background-color: #6f42c1; color: white; min-height: 40px; font-weight: bold;"
         )
         self.btn_default_pose.clicked.connect(self.return_to_default_pose)
-        
+
         self.btn_clear_motion = QPushButton('🧹 초기화')
         self.btn_clear_motion.clicked.connect(self.clear_motion)
         self.btn_save_sequence = QPushButton('💾 저장')
@@ -1449,9 +1756,14 @@ class SDKMotionEditor(QWidget):
         self.btn_export.setStyleSheet("background-color: #28a745; color: white;")
         self.btn_export.clicked.connect(self.export_motion_json)
         
-        ctrl_layout.addWidget(self.btn_play_motion_sim)
-        ctrl_layout.addWidget(self.btn_play_motion_robot)
+        ctrl_layout.addWidget(self.btn_keyframe_play)
+        ctrl_layout.addWidget(self.btn_keyframe_pause)
         ctrl_layout.addWidget(self.btn_stop_motion)
+        ctrl_layout.addWidget(self.btn_robot_sync)
+        ctrl_layout.addWidget(repeat_label)
+        ctrl_layout.addWidget(self.spin_motion_repeat)
+        ctrl_layout.addWidget(speed_label)
+        ctrl_layout.addWidget(self.spin_motion_speed)
         ctrl_layout.addWidget(self.btn_default_pose)
         ctrl_layout.addSpacing(15)
         ctrl_layout.addWidget(self.btn_clear_motion)
@@ -1477,6 +1789,15 @@ class SDKMotionEditor(QWidget):
         self.spin_max_time.setValue(self.max_seq_ms)
         self.spin_max_time.setSingleStep(500)
         self.spin_max_time.setStyleSheet(bright_spinbox_style)
+
+        lbl_zoom = QLabel("   |   타임라인 확대(%):")
+        self.spin_timeline_zoom = QSpinBox()
+        self.spin_timeline_zoom.setRange(25, 400)
+        self.spin_timeline_zoom.setSingleStep(25)
+        self.spin_timeline_zoom.setValue(int(self.SCALE * 100))
+        self.spin_timeline_zoom.setSuffix(" %")
+        self.spin_timeline_zoom.setStyleSheet(bright_spinbox_style)
+        self.spin_timeline_zoom.valueChanged.connect(self.apply_timeline_zoom)
         
         self.btn_apply_max_time = QPushButton("적용")
         self.btn_apply_max_time.setStyleSheet("background-color: #6f42c1; color: white;")
@@ -1497,15 +1818,35 @@ class SDKMotionEditor(QWidget):
         tl_tools_layout.addWidget(lbl_max_time)
         tl_tools_layout.addWidget(self.spin_max_time)
         tl_tools_layout.addWidget(self.btn_apply_max_time)
+        tl_tools_layout.addWidget(lbl_zoom)
+        tl_tools_layout.addWidget(self.spin_timeline_zoom)
         tl_tools_layout.addWidget(lbl_target)
         tl_tools_layout.addWidget(self.spin_target_time)
         tl_tools_layout.addWidget(self.btn_apply_time)
         tl_base_layout.addLayout(tl_tools_layout)
+
+        gap_tools_layout = QHBoxLayout()
+        gap_tools_layout.addStretch()
+        gap_label = QLabel("↔️ 모든 프레임 사이 동일 간격(ms):")
+        self.spin_uniform_frame_gap = QSpinBox()
+        self.spin_uniform_frame_gap.setRange(0, 10000)
+        self.spin_uniform_frame_gap.setSingleStep(10)
+        self.spin_uniform_frame_gap.setValue(0)
+        self.spin_uniform_frame_gap.setSuffix(" ms")
+        self.spin_uniform_frame_gap.setStyleSheet(bright_spinbox_style)
+        self.spin_uniform_frame_gap.lineEdit().returnPressed.connect(self.apply_uniform_frame_gap)
+        self.btn_apply_uniform_gap = QPushButton("간격 일괄 적용")
+        self.btn_apply_uniform_gap.setStyleSheet("background-color: #00897b; color: white;")
+        self.btn_apply_uniform_gap.clicked.connect(self.apply_uniform_frame_gap)
+        gap_tools_layout.addWidget(gap_label)
+        gap_tools_layout.addWidget(self.spin_uniform_frame_gap)
+        gap_tools_layout.addWidget(self.btn_apply_uniform_gap)
+        tl_base_layout.addLayout(gap_tools_layout)
         
         self.timeline_scroll = QScrollArea()
         self.timeline_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.timeline_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.timeline_scroll.setMinimumHeight(170)
+        self.timeline_scroll.setMinimumHeight(200)
         
         self.timeline_container = TimelineContainer(self)
         self.timeline_scroll.setWidget(self.timeline_container)
@@ -1518,6 +1859,456 @@ class SDKMotionEditor(QWidget):
         main_layout.addWidget(timeline_group, 3)
         
         tab.setLayout(main_layout)
+
+    def init_sequence_composer_tab(self, tab):
+        self.COMPOSER_SCALE = 1.0
+        self.sequence_composer_entries = []
+        main_layout = QVBoxLayout(tab)
+
+        title = QLabel("🧩 저장된 시퀀스를 이어붙여 새로운 시퀀스 만들기")
+        title.setStyleSheet("font-size: 16pt; font-weight: bold; padding: 8px;")
+        main_layout.addWidget(title)
+
+        source_group = QGroupBox("저장된 시퀀스")
+        source_layout = QVBoxLayout(source_group)
+        self.composer_source_list = QListWidget()
+        self.composer_source_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.composer_source_list.setDragEnabled(True)
+        self.composer_source_list.itemDoubleClicked.connect(lambda _: self.add_sequence_to_composer())
+        source_layout.addWidget(self.composer_source_list)
+
+        add_button = QPushButton("선택 시퀀스 추가 ➡️")
+        add_button.setMinimumHeight(45)
+        add_button.setStyleSheet("background-color: #007bff; color: white; font-weight: bold;")
+        add_button.clicked.connect(self.add_sequence_to_composer)
+        source_layout.addWidget(add_button)
+        delete_source_button = QPushButton("🗑️ 선택 시퀀스 삭제")
+        delete_source_button.setStyleSheet(
+            "background-color: #dc3545; color: white; font-weight: bold;"
+        )
+        delete_source_button.clicked.connect(self.delete_composer_selected_sequence)
+        source_layout.addWidget(delete_source_button)
+
+        chain_group = QGroupBox("시퀀스 타임라인 (블록 드래그로 순서 변경 / 저장 시퀀스 끌어놓기)")
+        chain_layout = QVBoxLayout(chain_group)
+        composer_tools = QHBoxLayout()
+        self.lbl_composer_meta = QLabel("구성: 0개 시퀀스 / 0개 프레임 / 0ms")
+        self.lbl_composer_meta.setStyleSheet(
+            "font-size: 13pt; font-weight: bold; color: #69f0ae; padding: 8px;"
+        )
+        composer_zoom_label = QLabel("타임라인 확대:")
+        self.spin_composer_zoom = QSpinBox()
+        self.spin_composer_zoom.setRange(25, 400)
+        self.spin_composer_zoom.setSingleStep(25)
+        self.spin_composer_zoom.setValue(100)
+        self.spin_composer_zoom.setSuffix(" %")
+        self.spin_composer_zoom.valueChanged.connect(self.apply_composer_timeline_zoom)
+        composer_tools.addWidget(self.lbl_composer_meta)
+        composer_tools.addStretch()
+        composer_tools.addWidget(composer_zoom_label)
+        composer_tools.addWidget(self.spin_composer_zoom)
+        chain_layout.addLayout(composer_tools)
+        self.composer_timeline_scroll = QScrollArea()
+        self.composer_timeline_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.composer_timeline_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.composer_timeline_scroll.setMinimumHeight(180)
+        self.composer_timeline_container = SequenceTimelineContainer(self)
+        self.composer_timeline_scroll.setWidget(self.composer_timeline_container)
+        chain_layout.addWidget(self.composer_timeline_scroll)
+        main_layout.addWidget(source_group, 2)
+
+        composer_ctrl_group = QGroupBox("⚙️ 시퀀스 컨트롤 패널")
+        composer_ctrl_group.setStyleSheet("font-weight: bold; font-size: 13pt;")
+        controls = QHBoxLayout(composer_ctrl_group)
+        self.composer_btn_play = QPushButton("▶️ 재생")
+        self.composer_btn_play.clicked.connect(self.play_composed_sequence)
+        self.composer_btn_pause = QPushButton("⏸️ 일시정지")
+        self.composer_btn_pause.clicked.connect(self.pause_motion_sequence)
+        self.composer_btn_pause.setEnabled(False)
+        self.composer_btn_stop = QPushButton("⏹️ 정지")
+        self.composer_btn_stop.clicked.connect(self.stop_motion_sequence)
+        self.composer_btn_stop.setEnabled(False)
+        self.composer_btn_sync = QPushButton("🤖 로봇 동기화: OFF")
+        self.composer_btn_sync.setCheckable(True)
+        self.composer_btn_sync.toggled.connect(self.toggle_composer_robot_sync)
+        composer_repeat_label = QLabel("반복:")
+        self.spin_composer_repeat = QSpinBox()
+        self.spin_composer_repeat.setRange(1, 999)
+        self.spin_composer_repeat.setValue(1)
+        self.spin_composer_repeat.setSuffix(" 회")
+        self.spin_composer_repeat.setMinimumWidth(85)
+        composer_speed_label = QLabel("배속:")
+        self.spin_composer_speed = QDoubleSpinBox()
+        self.spin_composer_speed.setRange(0.1, 5.0)
+        self.spin_composer_speed.setDecimals(1)
+        self.spin_composer_speed.setSingleStep(0.1)
+        self.spin_composer_speed.setValue(1.0)
+        self.spin_composer_speed.setSuffix("x")
+        self.spin_composer_speed.setMinimumWidth(90)
+        default_button = QPushButton("🏠 기본자세 복귀")
+        default_button.clicked.connect(self.return_to_default_pose)
+        clear_button = QPushButton("🧹 초기화")
+        clear_button.clicked.connect(self.clear_sequence_composer)
+        save_button = QPushButton("💾 저장")
+        save_button.clicked.connect(self.save_composed_sequence)
+        manage_button = QPushButton("📁 관리/불러오기")
+        manage_button.clicked.connect(self.open_sequence_manager)
+        export_button = QPushButton("🚀 Jetson 내보내기")
+        export_button.clicked.connect(self.export_composed_sequence_json)
+        for button in (
+            self.composer_btn_play, self.composer_btn_pause, self.composer_btn_stop,
+            self.composer_btn_sync,
+        ):
+            button.setMinimumHeight(45)
+            controls.addWidget(button)
+        controls.addWidget(composer_repeat_label)
+        controls.addWidget(self.spin_composer_repeat)
+        controls.addWidget(composer_speed_label)
+        controls.addWidget(self.spin_composer_speed)
+        for button in (default_button, clear_button, save_button, manage_button, export_button):
+            button.setMinimumHeight(45)
+            controls.addWidget(button)
+        main_layout.addWidget(composer_ctrl_group, 1)
+        main_layout.addWidget(chain_group, 3)
+
+    def refresh_composer_source_list(self):
+        if not hasattr(self, 'composer_source_list'):
+            return
+        self.composer_source_list.clear()
+        for idx, sequence in enumerate(self.saved_sequences):
+            frames = sequence.get('frames', [])
+            duration = max(
+                (frame.get('start_ms', 0) + frame.get('time_ms', 0) for frame in frames),
+                default=0,
+            )
+            item = QListWidgetItem(
+                f"[{idx + 1}] {sequence['name']} "
+                f"({len(frames)} 프레임 / {duration}ms / "
+                f"{sequence.get('repeat_count', 1)}회 / {sequence.get('playback_speed', 1.0):.1f}x)"
+            )
+            item.setData(Qt.UserRole, idx)
+            self.composer_source_list.addItem(item)
+        if hasattr(self, 'sequence_composer_entries'):
+            for entry in self.sequence_composer_entries:
+                idx = entry['sequence_idx']
+                if 0 <= idx < len(self.saved_sequences):
+                    sequence = self.saved_sequences[idx]
+                    entry['name'] = sequence['name']
+                    entry['time_ms'] = self.sequence_duration(idx)
+                    entry['frame_count'] = len(sequence.get('frames', []))
+            self.pack_sequence_composer_entries()
+            self.refresh_sequence_composer_timeline()
+
+    def sequence_duration(self, sequence_idx):
+        frames = self.saved_sequences[sequence_idx].get('frames', [])
+        if not frames:
+            return 0
+        start = min(frame.get('start_ms', 0) for frame in frames)
+        end = max(frame.get('start_ms', 0) + frame.get('time_ms', 0) for frame in frames)
+        return max(0, end - start)
+
+    def add_sequence_to_composer(self, sequence_idx=None, drop_x=None):
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        if sequence_idx is None:
+            item = self.composer_source_list.currentItem()
+            if item is None:
+                return QMessageBox.warning(self, "경고", "추가할 저장 시퀀스를 선택하세요.")
+            sequence_idx = item.data(Qt.UserRole)
+        sequence = self.saved_sequences[sequence_idx]
+        duration = self.sequence_duration(sequence_idx)
+        entry = {
+            "sequence_idx": sequence_idx,
+            "name": sequence['name'],
+            "time_ms": duration,
+            "frame_count": len(sequence.get('frames', [])),
+            "start_ms": self.composer_total_duration(),
+        }
+        self.sequence_composer_entries.append(entry)
+        if drop_x is not None:
+            self.reorder_sequence_composer_entry(entry, drop_x)
+        else:
+            self.pack_sequence_composer_entries()
+            self.refresh_sequence_composer_timeline()
+
+    def remove_sequence_composer_entry(self, index):
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        if 0 <= index < len(self.sequence_composer_entries):
+            self.sequence_composer_entries.pop(index)
+            self.pack_sequence_composer_entries()
+            self.refresh_sequence_composer_timeline()
+
+    def clear_sequence_composer(self):
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        self.sequence_composer_entries.clear()
+        self.refresh_sequence_composer_timeline()
+
+    def composer_sequence_indices(self):
+        return [entry['sequence_idx'] for entry in self.sequence_composer_entries]
+
+    def composer_total_duration(self):
+        return sum(entry['time_ms'] for entry in self.sequence_composer_entries)
+
+    def composer_timeline_width(self):
+        return max(1200, int(self.composer_total_duration() * self.COMPOSER_SCALE) + 10)
+
+    def pack_sequence_composer_entries(self):
+        current = 0
+        for entry in self.sequence_composer_entries:
+            entry['start_ms'] = current
+            current += entry['time_ms']
+
+    def reorder_sequence_composer_entry(self, moved_entry, moved_x):
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        others = [entry for entry in self.sequence_composer_entries if entry is not moved_entry]
+        moved_center = moved_x + moved_entry['time_ms'] * self.COMPOSER_SCALE / 2.0
+        insert_at = 0
+        for entry in others:
+            center = (entry['start_ms'] + entry['time_ms'] / 2.0) * self.COMPOSER_SCALE
+            if moved_center >= center:
+                insert_at += 1
+        others.insert(insert_at, moved_entry)
+        self.sequence_composer_entries = others
+        self.pack_sequence_composer_entries()
+        self.refresh_sequence_composer_timeline()
+
+    def refresh_sequence_composer_timeline(self):
+        if not hasattr(self, 'composer_timeline_container'):
+            return
+        for child in self.composer_timeline_container.findChildren(SequenceTimelineBlockWidget):
+            child.setParent(None)
+            child.deleteLater()
+        for index, entry in enumerate(self.sequence_composer_entries):
+            block = SequenceTimelineBlockWidget(entry, index, self)
+            block.setParent(self.composer_timeline_container)
+            x = int(entry['start_ms'] * self.COMPOSER_SCALE)
+            width = max(1, int(entry['time_ms'] * self.COMPOSER_SCALE))
+            block.setGeometry(x, 40, width, 90)
+            block.show()
+        self.composer_timeline_container.setMinimumSize(self.composer_timeline_width(), 145)
+        self.composer_timeline_container.update()
+        self.refresh_composer_meta()
+
+    def build_composed_sequence_frames(self):
+        combined_frames = []
+        current_start = 0
+        for sequence_idx in self.composer_sequence_indices():
+            source_frames = self.saved_sequences[sequence_idx].get('frames', [])
+            if not source_frames:
+                continue
+            ordered = sorted(source_frames, key=lambda frame: frame.get('start_ms', 0))
+            source_start = min(frame.get('start_ms', 0) for frame in ordered)
+            source_end = max(
+                frame.get('start_ms', 0) + max(MIN_TIMELINE_FRAME_MS, frame.get('time_ms', 0))
+                for frame in ordered
+            )
+            for source_frame in ordered:
+                new_frame = copy.deepcopy(source_frame)
+                new_frame['time_ms'] = max(MIN_TIMELINE_FRAME_MS, new_frame['time_ms'])
+                new_frame['start_ms'] = current_start + source_frame.get('start_ms', 0) - source_start
+                combined_frames.append(new_frame)
+            current_start += source_end - source_start
+        return combined_frames, current_start
+
+    def refresh_composer_meta(self, *args):
+        if not hasattr(self, 'lbl_composer_meta'):
+            return
+        frames, duration = self.build_composed_sequence_frames()
+        self.lbl_composer_meta.setText(
+            f"구성: {len(self.sequence_composer_entries)}개 시퀀스 / {len(frames)}개 프레임 / {duration}ms"
+        )
+
+    def save_composed_sequence(self):
+        if not self.sequence_composer_entries:
+            return QMessageBox.warning(self, "경고", "먼저 조합할 시퀀스를 추가하세요.")
+        frames, duration = self.build_composed_sequence_frames()
+        if not frames:
+            return QMessageBox.warning(self, "경고", "조합 결과에 프레임이 없습니다.")
+        if duration > 60000:
+            return QMessageBox.warning(self, "시간 초과", "조합 결과가 최대 타임라인 길이 60000ms를 초과합니다.")
+
+        name, ok = QInputDialog.getText(self, "시퀀스 조합 저장", "새 시퀀스 이름:")
+        if not ok or not name.strip():
+            return
+        self.saved_sequences.append({
+            "name": name.strip(),
+            "max_seq_ms": max(1000, duration),
+            "repeat_count": self.spin_composer_repeat.value(),
+            "playback_speed": self.spin_composer_speed.value(),
+            "frames": frames,
+        })
+        self.refresh_sequence_list()
+        self.save_persistent_state()
+        QMessageBox.information(
+            self,
+            "저장 완료",
+            f"'{name.strip()}' 시퀀스를 {len(frames)}개 프레임, {duration}ms로 저장했습니다.",
+        )
+
+    def activate_composer_playback(self):
+        frames, duration = self.build_composed_sequence_frames()
+        if not frames:
+            QMessageBox.warning(self, "경고", "재생할 조합 시퀀스가 없습니다.")
+            return False
+        if self.playback_context != "composer":
+            self.composer_motion_backup = (self.motion_sequence, self.max_seq_ms)
+        self.motion_sequence = copy.deepcopy(frames)
+        self.max_seq_ms = max(1, duration)
+        self.playback_context = "composer"
+        return True
+
+    def play_composed_sequence(self):
+        if self.playback_context != "composer" and not self.activate_composer_playback():
+            return
+        if not self.is_paused:
+            self.playback_repeat_target = self.spin_composer_repeat.value()
+            self.playback_repeat_current = 1
+            self.playback_speed = self.spin_composer_speed.value()
+        self.play_keyframe_sequence()
+
+    def toggle_composer_robot_sync(self, checked):
+        if checked:
+            if not self.sequence_composer_entries:
+                self.composer_btn_sync.blockSignals(True)
+                self.composer_btn_sync.setChecked(False)
+                self.composer_btn_sync.blockSignals(False)
+                return QMessageBox.warning(self, "경고", "먼저 조합할 시퀀스를 추가하세요.")
+            if self.robot_sync_enabled:
+                self.composer_btn_sync.setText("🤖 로봇 동기화: ON")
+                return
+            original_motion, original_max = self.motion_sequence, self.max_seq_ms
+            frames, duration = self.build_composed_sequence_frames()
+            self.motion_sequence, self.max_seq_ms = frames, max(1, duration)
+            self.btn_robot_sync.setChecked(True)
+            self.motion_sequence, self.max_seq_ms = original_motion, original_max
+            if not self.robot_sync_enabled:
+                self.composer_btn_sync.blockSignals(True)
+                self.composer_btn_sync.setChecked(False)
+                self.composer_btn_sync.blockSignals(False)
+            else:
+                self.composer_btn_sync.setText("🤖 로봇 동기화: ON")
+        else:
+            if self.robot_sync_enabled:
+                self.btn_robot_sync.setChecked(False)
+            self.composer_btn_sync.setText("🤖 로봇 동기화: OFF")
+
+    def export_composed_sequence_json(self):
+        frames, duration = self.build_composed_sequence_frames()
+        if not frames:
+            return QMessageBox.warning(self, "경고", "내보낼 조합 시퀀스가 없습니다.")
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "조합 시퀀스 저장", "jetson_composed_sequence.json", "JSON Files (*.json)"
+        )
+        if file_name:
+            with open(file_name, 'w', encoding='utf-8') as file:
+                json.dump({
+                    "max_seq_ms": duration,
+                    "repeat_count": self.spin_composer_repeat.value(),
+                    "playback_speed": self.spin_composer_speed.value(),
+                    "frames": frames,
+                }, file, indent=4, ensure_ascii=False)
+            QMessageBox.information(self, "성공", "조합 시퀀스 데이터 추출 완료!")
+
+    def apply_timeline_zoom(self, value):
+        old_scale = self.SCALE
+        viewport_center_ms = (
+            self.timeline_scroll.horizontalScrollBar().value()
+            + self.timeline_scroll.viewport().width() / 2
+        ) / old_scale
+        self.SCALE = value / 100.0
+        self.refresh_timeline_ui()
+        new_scroll = int(viewport_center_ms * self.SCALE - self.timeline_scroll.viewport().width() / 2)
+        self.timeline_scroll.horizontalScrollBar().setValue(max(0, new_scroll))
+
+    def apply_composer_timeline_zoom(self, value):
+        old_scale = self.COMPOSER_SCALE
+        center_ms = (
+            self.composer_timeline_scroll.horizontalScrollBar().value()
+            + self.composer_timeline_scroll.viewport().width() / 2
+        ) / old_scale
+        self.COMPOSER_SCALE = value / 100.0
+        self.refresh_sequence_composer_timeline()
+        new_scroll = int(
+            center_ms * self.COMPOSER_SCALE
+            - self.composer_timeline_scroll.viewport().width() / 2
+        )
+        self.composer_timeline_scroll.horizontalScrollBar().setValue(max(0, new_scroll))
+
+    def previous_frame_end_ms(self, target_frame):
+        ordered = sorted(self.motion_sequence, key=lambda frame: frame['start_ms'])
+        index = next(
+            (idx for idx, frame in enumerate(ordered) if frame is target_frame),
+            -1,
+        )
+        if index <= 0:
+            return 0
+        previous = ordered[index - 1]
+        return previous['start_ms'] + previous['time_ms']
+
+    def frame_gap_ms(self, target_frame):
+        return max(0, target_frame['start_ms'] - self.previous_frame_end_ms(target_frame))
+
+    def reorder_motion_frame(self, moved_frame, moved_x):
+        """빈 위치는 유지하고, 충돌 위치 삽입 시 뒤 블록만 필요한 만큼 밉니다."""
+        duration = max(MIN_TIMELINE_FRAME_MS, int(moved_frame['time_ms']))
+        max_start = max(0, self.max_seq_ms - duration)
+        desired_start = max(0, min(int(round(moved_x / self.SCALE)), max_start))
+        others = [frame for frame in self.motion_sequence if frame is not moved_frame]
+        original_positions = [(frame, frame['start_ms']) for frame in self.motion_sequence]
+
+        def is_free(start_ms):
+            end_ms = start_ms + duration
+            return all(
+                end_ms <= frame['start_ms']
+                or start_ms >= frame['start_ms'] + frame['time_ms']
+                for frame in others
+            )
+
+        if is_free(desired_start):
+            chosen_start = desired_start
+        else:
+            ordered = sorted(others, key=lambda frame: frame['start_ms'])
+            moved_center = desired_start + duration / 2.0
+            insert_at = sum(
+                moved_center >= frame['start_ms'] + frame['time_ms'] / 2.0
+                for frame in ordered
+            )
+            previous_end = 0
+            if insert_at > 0:
+                previous = ordered[insert_at - 1]
+                previous_end = previous['start_ms'] + previous['time_ms']
+            chosen_start = max(desired_start, previous_end)
+            ordered.insert(insert_at, moved_frame)
+            moved_frame['start_ms'] = chosen_start
+
+            # 삽입 지점 뒤쪽만 밀어 기존의 다른 빈 간격은 가능한 한 유지합니다.
+            current_end = chosen_start + duration
+            for frame in ordered[insert_at + 1:]:
+                if frame['start_ms'] < current_end:
+                    frame['start_ms'] = current_end
+                current_end = frame['start_ms'] + frame['time_ms']
+
+            if current_end > 60000:
+                for frame, original_start in original_positions:
+                    frame['start_ms'] = original_start
+                drag_original = moved_frame.get('_drag_original_start_ms')
+                if drag_original is None:
+                    self.motion_sequence.remove(moved_frame)
+                else:
+                    moved_frame['start_ms'] = drag_original
+                    moved_frame.pop('_drag_original_start_ms', None)
+                return False
+            if current_end > self.max_seq_ms:
+                self.max_seq_ms = current_end
+                self.spin_max_time.setValue(current_end)
+
+        moved_frame['start_ms'] = chosen_start
+        moved_frame.pop('_drag_original_start_ms', None)
+        self.motion_sequence.sort(key=lambda frame: frame['start_ms'])
+        return True
 
     def resort_motion_sequence(self):
         if not self.motion_sequence: return
@@ -1563,7 +2354,7 @@ class SDKMotionEditor(QWidget):
         current_x = 0
         for f in sorted(self.motion_sequence, key=lambda x: x['start_ms']):
             new_start = int(f['start_ms'] * ratio)
-            new_time = max(40, int(f['time_ms'] * ratio)) 
+            new_time = max(MIN_TIMELINE_FRAME_MS, int(f['time_ms'] * ratio))
             if new_start < current_x: new_start = current_x
             f['start_ms'] = new_start
             f['time_ms'] = new_time
@@ -1576,7 +2367,46 @@ class SDKMotionEditor(QWidget):
         self.refresh_timeline_ui()
         QMessageBox.information(self, "완료", f"전체 시퀀스가 비율 스케일링 되었습니다.")
 
+    def apply_uniform_frame_gap(self):
+        if not self.motion_sequence:
+            return QMessageBox.warning(self, "경고", "간격을 적용할 프레임이 없습니다.")
+
+        gap_ms = self.spin_uniform_frame_gap.value()
+        ordered = sorted(self.motion_sequence, key=lambda frame: frame['start_ms'])
+        first_start = max(0, ordered[0]['start_ms'])
+        planned_starts = []
+        current_start = first_start
+        for frame in ordered:
+            planned_starts.append(current_start)
+            current_start += frame['time_ms'] + gap_ms
+        final_end = current_start - gap_ms
+
+        if final_end > 60000:
+            return QMessageBox.warning(
+                self,
+                "시간 초과",
+                f"{gap_ms}ms 간격을 적용하면 종료 지점이 {final_end}ms가 되어 "
+                "최대 길이 60000ms를 초과합니다.",
+            )
+
+        for frame, start_ms in zip(ordered, planned_starts):
+            frame['start_ms'] = start_ms
+        self.motion_sequence = ordered
+        if final_end > self.max_seq_ms:
+            self.max_seq_ms = final_end
+            self.spin_max_time.setValue(final_end)
+        self.refresh_timeline_ui()
+        QMessageBox.information(
+            self,
+            "간격 적용 완료",
+            f"모든 프레임 사이 간격을 {gap_ms}ms로 맞췄습니다.\n"
+            f"첫 프레임 시작: {first_start}ms / 종료 지점: {final_end}ms",
+        )
+
     def refresh_timeline_ui(self):
+        # 로드된 예전 데이터나 일괄 시간 변경 결과도 그리기 전에 정렬하여
+        # 블록이 같은 트랙에서 서로 겹치는 상태를 허용하지 않습니다.
+        self.resort_motion_sequence()
         for child in self.timeline_container.findChildren(TimelineBlockWidget):
             child.setParent(None)
             child.deleteLater()
@@ -1586,11 +2416,23 @@ class SDKMotionEditor(QWidget):
             block.setParent(self.timeline_container)
             x_pos = int(frame_data['start_ms'] * self.SCALE)
             w = int(frame_data['time_ms'] * self.SCALE) 
-            block.setGeometry(x_pos, 40, w, 80) 
+            block.setGeometry(x_pos, 40, w, 110)
             block.show()
             
         fixed_width = int(self.max_seq_ms * self.SCALE)
-        self.timeline_container.setMinimumSize(fixed_width + 10, 140)
+        self.timeline_container.setMinimumSize(fixed_width + 10, 165)
+        if hasattr(self, 'spin_uniform_frame_gap'):
+            ordered = sorted(self.motion_sequence, key=lambda frame: frame['start_ms'])
+            gaps = [
+                ordered[index]['start_ms']
+                - (ordered[index - 1]['start_ms'] + ordered[index - 1]['time_ms'])
+                for index in range(1, len(ordered))
+            ]
+            displayed_gap = gaps[0] if gaps and all(gap == gaps[0] for gap in gaps) else 0
+            if 0 <= displayed_gap <= self.spin_uniform_frame_gap.maximum():
+                self.spin_uniform_frame_gap.blockSignals(True)
+                self.spin_uniform_frame_gap.setValue(displayed_gap)
+                self.spin_uniform_frame_gap.blockSignals(False)
         self.refresh_timeline_meta()
         self.save_persistent_state()
 
@@ -1604,7 +2446,8 @@ class SDKMotionEditor(QWidget):
 
     def add_to_motion(self):
         selected_items = self.frame_list_all.selectedItems()
-        if not selected_items: return QMessageBox.warning(self, "경고", "추가할 프레임을 선택하세요.")
+        if not selected_items:
+            return QMessageBox.warning(self, "경고", "추가할 프레임을 선택하세요.")
 
         current_end_ms = 0
         if self.motion_sequence: current_end_ms = max(f['start_ms'] + f['time_ms'] for f in self.motion_sequence)
@@ -1612,7 +2455,7 @@ class SDKMotionEditor(QWidget):
         for item in selected_items:
             original_idx = item.data(Qt.UserRole)
             new_frame = copy.deepcopy(self.frames[original_idx])
-            if new_frame['time_ms'] < 10: new_frame['time_ms'] = 10
+            new_frame['time_ms'] = max(MIN_TIMELINE_FRAME_MS, new_frame['time_ms'])
             
             if current_end_ms + new_frame['time_ms'] > self.max_seq_ms:
                 QMessageBox.warning(self, "공간 부족", f"타임라인 공간이 부족하여 추가할 수 없습니다.\n여백을 확보하거나 총 길이를 늘려주세요.")
@@ -1635,6 +2478,7 @@ class SDKMotionEditor(QWidget):
         if not self.motion_sequence: return
         if QMessageBox.question(self, '확인', "모두 비우시겠습니까?", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
             self.motion_sequence.clear()
+            self.lbl_loaded_sequence.setText("현재 타임라인: 새 시퀀스")
             self.refresh_timeline_ui()
 
     def save_sequence(self):
@@ -1643,7 +2487,9 @@ class SDKMotionEditor(QWidget):
         if ok and seq_name.strip():
             self.saved_sequences.append({
                 "name": seq_name.strip(), 
-                "max_seq_ms": self.max_seq_ms, 
+                "max_seq_ms": self.max_seq_ms,
+                "repeat_count": self.spin_motion_repeat.value(),
+                "playback_speed": self.spin_motion_speed.value(),
                 "frames": copy.deepcopy(self.motion_sequence)
             })
             self.refresh_sequence_list()
@@ -1656,8 +2502,20 @@ class SDKMotionEditor(QWidget):
         target_seq = self.saved_sequences[idx]
         self.max_seq_ms = target_seq.get("max_seq_ms", 5000)
         self.spin_max_time.setValue(self.max_seq_ms)
+        self.spin_motion_repeat.setValue(max(1, int(target_seq.get("repeat_count", 1))))
+        self.spin_motion_speed.setValue(
+            max(0.1, min(5.0, float(target_seq.get("playback_speed", 1.0))))
+        )
         self.motion_sequence = copy.deepcopy(target_seq["frames"])
         self.refresh_timeline_ui()
+        self.lbl_loaded_sequence.setText(f"현재 타임라인: {target_seq['name']} (불러옴)")
+        self.tabs.setCurrentWidget(self.tab_motion)
+
+    def load_selected_sequence_to_timeline(self):
+        item = self.sequence_list_ui.currentItem()
+        if item is None:
+            return QMessageBox.warning(self, "경고", "불러올 저장 시퀀스를 선택하세요.")
+        self.load_saved_sequence(item.data(Qt.UserRole))
 
     def load_sequence_from_list_item(self, item):
         idx = item.data(Qt.UserRole)
@@ -1677,134 +2535,280 @@ class SDKMotionEditor(QWidget):
             idx = items.index(item)
             self.load_saved_sequence(idx)
 
-    def play_motion_sequence(self, real_robot=False):
-        if not self.motion_sequence: return QMessageBox.warning(self, "경고", "재생할 시퀀스가 없습니다.")
-        
-        if real_robot:
-            reply = QMessageBox.question(self, '경고', 
-                                         "⚠️ 로봇이 실제로 구동됩니다!\n주변을 확인하셨습니까?",
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if reply != QMessageBox.Yes: return
-            self.frame_apply_timer.stop()
-            self.frame_apply_ids = []
-            self.frame_apply_on_complete = None
-            if not self.prepare_real_robot_sequence():
-                return
-            self.move_to_default_pose_before_sequence()
-            return
-
-        self.start_motion_playback(real_robot=False)
-
-    def start_motion_playback(self, real_robot=False):
-        self.execute_on_real_robot = real_robot
-        if real_robot:
-            self.btn_play_motion_robot.setText("🤖 구동 중...")
+    def update_playback_buttons(self):
+        self.btn_keyframe_play.setEnabled(not self.is_playing)
+        self.spin_motion_repeat.setEnabled(
+            not self.is_playing and not (self.is_paused and self.playback_context == "motion")
+        )
+        self.spin_motion_speed.setEnabled(
+            not self.is_playing and not (self.is_paused and self.playback_context == "motion")
+        )
+        self.btn_keyframe_pause.setEnabled(self.is_playing)
+        self.btn_stop_motion.setEnabled(self.is_playing or self.is_paused or self.current_timeline_ms > 0)
+        if self.is_playing and self.playback_context == "motion":
+            self.btn_keyframe_play.setText(
+                f"▶️ 재생 중 ({self.playback_repeat_current}/{self.playback_repeat_target}, "
+                f"{self.playback_speed:.1f}x)"
+            )
         else:
-            self.btn_play_motion_sim.setText("▶️ 재생 중...")
+            self.btn_keyframe_play.setText("▶️ 계속 재생" if self.is_paused else "▶️ 재생")
+        if hasattr(self, 'composer_btn_play'):
+            composer_active = self.playback_context == "composer"
+            self.spin_composer_repeat.setEnabled(
+                not self.is_playing and not (self.is_paused and composer_active)
+            )
+            self.spin_composer_speed.setEnabled(
+                not self.is_playing and not (self.is_paused and composer_active)
+            )
+            self.composer_btn_play.setEnabled(not self.is_playing)
+            self.composer_btn_pause.setEnabled(self.is_playing and composer_active)
+            self.composer_btn_stop.setEnabled(composer_active and (self.is_playing or self.is_paused))
+            if self.is_playing and composer_active:
+                self.composer_btn_play.setText(
+                    f"▶️ 재생 중 ({self.playback_repeat_current}/{self.playback_repeat_target}, "
+                    f"{self.playback_speed:.1f}x)"
+                )
+            else:
+                self.composer_btn_play.setText("▶️ 계속 재생" if composer_active and self.is_paused else "▶️ 재생")
 
+    def toggle_robot_sync(self, checked):
+        if checked:
+            if not self.motion_sequence:
+                QMessageBox.warning(self, "경고", "로봇과 동기화할 키프레임 시퀀스가 없습니다.")
+                self.btn_robot_sync.blockSignals(True)
+                self.btn_robot_sync.setChecked(False)
+                self.btn_robot_sync.blockSignals(False)
+                return
+            reply = QMessageBox.question(
+                self,
+                "로봇 동기화",
+                "⚠️ 동기화를 켜면 재생 및 타임라인 이동에 따라 로봇이 실제로 움직입니다.\n"
+                "로봇 주변이 안전한지 확인하셨습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes or not self.prepare_real_robot_sequence():
+                self.btn_robot_sync.blockSignals(True)
+                self.btn_robot_sync.setChecked(False)
+                self.btn_robot_sync.blockSignals(False)
+                return
+            if not self.sync_sequence_start_from_robot():
+                self.btn_robot_sync.blockSignals(True)
+                self.btn_robot_sync.setChecked(False)
+                self.btn_robot_sync.blockSignals(False)
+                return
+            self.robot_sync_enabled = True
+            self.execute_on_real_robot = True
+            self.robot_scrub_command_angles = self.joints.copy()
+            self.robot_scrub_target_angles = self.joints.copy()
+            self.btn_robot_sync.setText("🤖 로봇 동기화: ON")
+            if hasattr(self, 'composer_btn_sync'):
+                self.composer_btn_sync.blockSignals(True)
+                self.composer_btn_sync.setChecked(True)
+                self.composer_btn_sync.setText("🤖 로봇 동기화: ON")
+                self.composer_btn_sync.blockSignals(False)
+            print("[🔗 로봇 동기화 ON] 재생 및 타임라인 탐색 자세를 실제 로봇에 전송합니다.")
+        else:
+            self.robot_sync_enabled = False
+            self.execute_on_real_robot = False
+            self.robot_scrub_timer.stop()
+            self.robot_scrub_target_angles = {}
+            self.robot_scrub_command_angles = {}
+            self.btn_robot_sync.setText("🤖 로봇 동기화: OFF")
+            if hasattr(self, 'composer_btn_sync'):
+                self.composer_btn_sync.blockSignals(True)
+                self.composer_btn_sync.setChecked(False)
+                self.composer_btn_sync.setText("🤖 로봇 동기화: OFF")
+                self.composer_btn_sync.blockSignals(False)
+            print("[🔓 로봇 동기화 OFF] 타임라인 조작은 3D 미리보기에만 반영됩니다.")
+
+    def sync_sequence_start_from_robot(self):
+        """첫 키프레임 보간 전에 실제 로봇 자세를 시작값으로 확정합니다."""
+        target_ids = sorted(self.sequence_joint_ids() & set(self.online_joints))
+        actual_angles = {}
+        failed_ids = []
+        for j_id in target_ids:
+            angle = self.read_present_angle(j_id)
+            if angle is None:
+                failed_ids.append(j_id)
+                continue
+            actual_angles[j_id] = angle
+            self.update_joint_display(j_id, angle, update_robot=False)
+
+        if failed_ids:
+            QMessageBox.warning(
+                self,
+                "통신 에러",
+                "시퀀스 시작 자세를 읽지 못해 로봇 동기화를 중단합니다.\n"
+                f"ID: {failed_ids}",
+            )
+            return False
+
+        self.update_3d_robot()
+        self.robot_scrub_command_angles = actual_angles.copy()
+        self.robot_scrub_target_angles = actual_angles.copy()
+        print(f"[✅ 시작 자세 동기화] 실제 로봇 관절 {len(actual_angles)}개의 현재 자세를 사용합니다.")
+        return bool(actual_angles)
+
+    def play_keyframe_sequence(self):
+        if not self.motion_sequence:
+            return QMessageBox.warning(self, "경고", "재생할 시퀀스가 없습니다.")
+        end_ms = max(f['start_ms'] + f['time_ms'] for f in self.motion_sequence)
+        if self.current_timeline_ms >= end_ms:
+            self.current_timeline_ms = 0
+        self.start_motion_playback(
+            real_robot=self.robot_sync_enabled,
+            start_ms=self.current_timeline_ms,
+        )
+
+    def play_motion_page_sequence(self):
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        self.playback_context = "motion"
+        if not self.is_paused:
+            self.playback_repeat_target = self.spin_motion_repeat.value()
+            self.playback_repeat_current = 1
+            self.playback_speed = self.spin_motion_speed.value()
+        self.play_keyframe_sequence()
+
+    def play_motion_sequence(self, real_robot=False):
+        """이전 호출부 호환용 래퍼."""
+        if real_robot and not self.robot_sync_enabled:
+            self.btn_robot_sync.setChecked(True)
+            if not self.robot_sync_enabled:
+                return
+        self.play_keyframe_sequence()
+
+    def start_motion_playback(self, real_robot=False, start_ms=0):
+        resuming = self.is_paused and start_ms > 0
+        if real_robot and self.robot_scrub_command_angles:
+            # 수동 탐색 중 실제로 전송된 마지막 자세를 재생 시작 자세로 사용해
+            # 재생 전환 순간의 점프를 줄입니다.
+            for j_id, angle in self.robot_scrub_command_angles.items():
+                self.joints[j_id] = angle
+        self.robot_scrub_timer.stop()
+        self.execute_on_real_robot = bool(real_robot and self.robot_sync_enabled)
         self.is_playing = True
-        self.btn_play_motion_sim.setEnabled(False)
-        self.btn_play_motion_robot.setEnabled(False)
-        self.btn_stop_motion.setEnabled(True)
-        
-        self.anim_duration = self.max_seq_ms / 1000.0 
-        self.start_angles = self.joints.copy() 
-        self.anim_start_time = time.time()
-        self.anim_timer.start(16) 
+        self.is_paused = False
+        self.current_timeline_ms = max(0, int(start_ms))
+        self.update_playback_buttons()
+
+        self.anim_duration = max(
+            f['start_ms'] + f['time_ms'] for f in self.motion_sequence
+        ) / 1000.0
+        # 재생 시작에는 별도의 기본/준비 자세를 사용하지 않습니다. 첫 번째
+        # 타임라인 프레임을 시작 자세로 삼아 저장된 키프레임만 재생합니다.
+        if not resuming:
+            first_frame = min(self.motion_sequence, key=lambda f: f['start_ms'])
+            self.start_angles = self.joints.copy()
+            self.start_angles.update(self.normalize_angles(first_frame.get('angles', {})))
+        self.anim_start_time = (
+            time.time() - self.current_timeline_ms / (1000.0 * self.playback_speed)
+        )
+        self.anim_timer.start(16)
+
+    def pause_motion_sequence(self):
+        if not self.is_playing:
+            return
+        self.current_timeline_ms = max(
+            0,
+            int((time.time() - self.anim_start_time) * 1000 * self.playback_speed),
+        )
+        self.is_playing = False
+        self.is_paused = True
+        self.anim_timer.stop()
+        self.update_playback_buttons()
 
     def find_default_pose_row(self):
         aliases = {"기본자세", "기본", "default", "home", "homepose"}
-        fallback_row = -1
         for row, frame in enumerate(self.frames):
             normalized_name = "".join(str(frame.get("name", "")).lower().split())
-            if normalized_name == "기본자세":
+            if normalized_name in aliases:
                 return row
-            if normalized_name in aliases and fallback_row < 0:
-                fallback_row = row
-        return fallback_row
+        return -1
 
-    def move_to_default_pose_before_sequence(self):
+    def return_to_default_pose(self):
+        """사용자가 버튼을 눌렀을 때만 기본자세 프레임을 천천히 적용합니다."""
         default_row = self.find_default_pose_row()
         if default_row < 0:
             QMessageBox.warning(
                 self,
                 "기본자세 없음",
-                "실제 구동 전에 사용할 '기본자세' 프레임을 찾지 못했습니다.",
+                "저장된 프레임에서 '기본자세'를 찾지 못했습니다.\n"
+                "기본으로 사용할 프레임 이름을 '기본자세'로 변경해 주세요.",
             )
             return
 
-        default_frame = self.frames[default_row]
-        default_pose = self.normalize_angles(default_frame.get("angles", {}))
-        target_ids = sorted(set(default_pose) & set(self.online_joints))
-        if not target_ids:
-            QMessageBox.warning(self, "통신 에러", "기본자세에 적용할 온라인 모터가 없습니다.")
-            return
-
-        self.frame_apply_timer.stop()
-        actual_angles = {}
-        for j_id in target_ids:
-            angle = self.read_present_angle(j_id)
-            if angle is None:
-                self.stop_motion_sequence()
-                QMessageBox.warning(self, "통신 에러", f"ID {j_id}의 현재 각도를 읽지 못해 실제 구동을 중단했습니다.")
-                return
-            actual_angles[j_id] = angle
-            self.update_joint_display(j_id, angle, update_robot=False)
-
-        default_duration = int(default_frame.get('time_ms', 1000))
-        self.frame_apply_start_angles = actual_angles
-        self.frame_apply_target_angles = {j_id: default_pose[j_id] for j_id in target_ids}
-        self.frame_apply_ids = target_ids
-        self.frame_apply_duration = max(1.5, default_duration / 1000.0)
-        self.frame_apply_start_time = time.time()
-        self.frame_apply_name = "기본자세"
-        self.frame_apply_on_complete = lambda: self.start_motion_playback(real_robot=True)
-
-        self.is_playing = False
-        self.execute_on_real_robot = False
-        self.btn_play_motion_sim.setEnabled(False)
-        self.btn_play_motion_robot.setEnabled(False)
-        self.btn_stop_motion.setEnabled(True)
-        self.update_3d_robot()
-        self.frame_apply_timer.start()
-        print(f"[🔄 기본자세 복귀] {self.frame_apply_duration:.1f}초 동안 천천히 이동한 뒤 모션을 시작합니다.")
+        self.frame_list_ui1.setCurrentRow(default_row)
+        self.apply_selected_frame()
 
     def anim_step(self):
         if not self.is_playing: return
         elapsed_sec = time.time() - self.anim_start_time
-        t_ms = int(elapsed_sec * 1000)
+        t_ms = int(elapsed_sec * 1000 * self.playback_speed)
+        self.current_timeline_ms = t_ms
+
+        if self.playback_context == "composer":
+            playhead_px = int(t_ms * self.COMPOSER_SCALE)
+            self.composer_timeline_container.set_playhead(True, playhead_px)
+            self.composer_timeline_scroll.ensureVisible(
+                playhead_px, self.composer_timeline_scroll.height() // 2, 50, 0
+            )
+        else:
+            playhead_px = int(t_ms * self.SCALE)
+            self.timeline_container.set_playhead(True, playhead_px)
+            self.timeline_scroll.ensureVisible(playhead_px, self.timeline_scroll.height()//2, 50, 0)
         
-        playhead_px = int(t_ms * self.SCALE)
-        self.timeline_container.set_playhead(True, playhead_px)
-        self.timeline_scroll.ensureVisible(playhead_px, self.timeline_scroll.height()//2, 50, 0)
-        
-        if elapsed_sec >= self.anim_duration:
+        if t_ms >= int(self.anim_duration * 1000):
             if self.motion_sequence:
                 last_frame = max(self.motion_sequence, key=lambda f: f['start_ms'] + f['time_ms'])
-                self.update_3d_robot(last_frame['angles'])
                 self.apply_to_real_robot(last_frame['angles'], force=True)
+            if self.playback_repeat_current < self.playback_repeat_target:
+                self.playback_repeat_current += 1
+                self.current_timeline_ms = 0
+                self.anim_start_time = time.time()
+                self.start_angles.update(self.normalize_angles(last_frame.get('angles', {})))
+                if self.playback_context == "composer":
+                    self.composer_timeline_container.set_playhead(True, 0)
+                    self.composer_timeline_scroll.horizontalScrollBar().setValue(0)
+                else:
+                    self.timeline_container.set_playhead(True, 0)
+                    self.timeline_scroll.horizontalScrollBar().setValue(0)
+                self.update_playback_buttons()
+                return
             self.stop_motion_sequence()
             return
 
         self.scrub_timeline(t_ms)
 
     def stop_motion_sequence(self):
+        stopped_context = self.playback_context
         self.is_playing = False
+        self.is_paused = False
+        self.current_timeline_ms = 0
         self.anim_timer.stop()
+        self.robot_scrub_timer.stop()
+        self.robot_scrub_target_angles = {}
         self.frame_apply_timer.stop()
         self.frame_apply_ids = []
         self.frame_apply_on_complete = None
-        self.btn_play_motion_sim.setEnabled(True)
-        self.btn_play_motion_robot.setEnabled(True)
-        self.btn_stop_motion.setEnabled(False)
-        self.btn_play_motion_sim.setText("▶️ 시뮬레이션 재생")
-        self.btn_play_motion_robot.setText("🤖 로봇 실제 구동")
-        self.execute_on_real_robot = False 
-        self.timeline_container.set_playhead(False)
+        self.execute_on_real_robot = self.robot_sync_enabled
+        self.timeline_container.set_playhead(True, 0)
+        if hasattr(self, 'composer_timeline_container'):
+            self.composer_timeline_container.set_playhead(False, 0)
+        if stopped_context == "composer" and self.composer_motion_backup is not None:
+            self.motion_sequence, self.max_seq_ms = self.composer_motion_backup
+            self.composer_motion_backup = None
+            self.playback_context = "motion"
+        self.update_playback_buttons()
         for child in self.timeline_container.findChildren(TimelineBlockWidget):
             child.set_default_style()
 
-    def scrub_timeline(self, t_ms):
+    def scrub_timeline(self, t_ms, force_robot=False):
+        self.current_timeline_ms = max(0, min(int(t_ms), self.max_seq_ms))
+        if not self.is_playing:
+            self.is_paused = self.current_timeline_ms > 0
+            self.update_playback_buttons()
         active_frame = None
         last_completed = None
         
@@ -1823,18 +2827,20 @@ class SDKMotionEditor(QWidget):
 
         target_angles_to_render = {}
         if active_frame:
-            prev_state = self.joints.copy() 
-            prev_time = -1
-            for f in self.motion_sequence:
+            # 일부 관절만 저장된 키프레임도 이전 자세 위에 누적합니다.
+            # 누락 관절을 0도로 처리하면 시퀀스 시작 시 팔이 펴지는 등
+            # 의도하지 않은 중간 자세가 발생합니다.
+            base_state = self.start_angles if self.is_playing else self.joints
+            prev_state = self.normalize_angles(base_state)
+            for f in sorted(self.motion_sequence, key=lambda frame: frame['start_ms'] + frame['time_ms']):
                 end_t = f['start_ms'] + f['time_ms']
-                if end_t <= active_frame['start_ms'] and end_t > prev_time:
-                    prev_state = self.normalize_angles(f['angles'])
-                    prev_time = end_t
+                if end_t <= active_frame['start_ms']:
+                    prev_state.update(self.normalize_angles(f['angles']))
             
             progress = (t_ms - active_frame['start_ms']) / float(active_frame['time_ms'])
             active_angles = self.normalize_angles(active_frame['angles'])
             for j_id in active_angles:
-                v0 = prev_state.get(j_id, 0)
+                v0 = prev_state.get(j_id, active_angles[j_id])
                 v1 = active_angles.get(j_id, 0)
                 target_angles_to_render[j_id] = self.interpolate_angle_shortest(v0, v1, progress)
         else:
@@ -1844,7 +2850,55 @@ class SDKMotionEditor(QWidget):
         self.update_3d_robot(target_angles_to_render)
         
         if self.is_playing:
-            self.apply_to_real_robot(target_angles_to_render)
+            self.apply_to_real_robot(target_angles_to_render, force=force_robot)
+        elif self.robot_sync_enabled:
+            self.queue_robot_scrub_target(target_angles_to_render)
+
+    def queue_robot_scrub_target(self, angles_dict):
+        """수동 타임라인 탐색 목표를 즉시 쓰지 않고 제한 속도로 추종합니다."""
+        target = self.normalize_angles(angles_dict)
+        if not target:
+            return
+        if not self.robot_scrub_command_angles:
+            self.robot_scrub_command_angles = {
+                j_id: self.joints.get(j_id, angle) for j_id, angle in target.items()
+            }
+        self.robot_scrub_target_angles = target
+        self.robot_scrub_last_time = time.time()
+        if not self.robot_scrub_timer.isActive():
+            self.robot_scrub_timer.start()
+
+    def step_robot_scrub(self):
+        if not self.robot_sync_enabled or not self.robot_scrub_target_angles:
+            self.robot_scrub_timer.stop()
+            return
+
+        now = time.time()
+        elapsed = max(0.001, min(0.1, now - self.robot_scrub_last_time))
+        self.robot_scrub_last_time = now
+        max_step = self.robot_scrub_speed_deg_per_sec * elapsed
+        next_angles = dict(self.robot_scrub_command_angles)
+        reached_target = True
+
+        for j_id, target_angle in self.robot_scrub_target_angles.items():
+            current_angle = next_angles.get(j_id, self.joints.get(j_id, target_angle))
+            delta = self.shortest_angle_delta(current_angle, target_angle)
+            if abs(delta) > max_step:
+                delta = math.copysign(max_step, delta)
+                reached_target = False
+            next_angles[j_id] = current_angle + delta
+
+        if not self.write_goal_positions(
+            next_angles,
+            target_ids=self.robot_scrub_target_angles.keys(),
+        ):
+            self.robot_scrub_timer.stop()
+            QMessageBox.warning(self, "통신 에러", "타임라인 자세를 로봇에 전송하지 못했습니다.")
+            return
+
+        self.robot_scrub_command_angles = next_angles
+        if reached_target:
+            self.robot_scrub_timer.stop()
 
     def normalize_angles(self, angles_dict):
         normalized = {}
@@ -1923,23 +2977,42 @@ class SDKMotionEditor(QWidget):
             return False
 
         torque_off_ids = []
+        torque_read_failed_ids = []
         for j_id in sorted(sequence_ids):
             torque_state = self.read_torque_enabled(j_id)
-            if torque_state is not True:
+            if torque_state is False:
                 torque_off_ids.append(j_id)
+            elif torque_state is None:
+                torque_read_failed_ids.append(j_id)
+
+        if torque_read_failed_ids:
+            QMessageBox.warning(
+                self,
+                "통신 에러",
+                f"토크 상태를 확인하지 못한 모터가 있어 실제 구동을 중단합니다.\nID: {torque_read_failed_ids}",
+            )
+            return False
 
         if torque_off_ids:
             print(f"   [🔒 실제 구동 준비] 토크 OFF 감지 ID {torque_off_ids} -> 전체 토크 ON 시도")
             self.set_all_torque_on()
 
         still_off_ids = []
+        verify_failed_ids = []
         for j_id in sorted(sequence_ids):
             torque_state = self.read_torque_enabled(j_id)
-            if torque_state is not True:
+            if torque_state is False:
                 still_off_ids.append(j_id)
+            elif torque_state is None:
+                verify_failed_ids.append(j_id)
 
-        if still_off_ids:
-            QMessageBox.warning(self, "통신 에러", f"토크 ON에 실패한 모터가 있어 실제 구동을 중단합니다.\nID: {still_off_ids}")
+        if still_off_ids or verify_failed_ids:
+            QMessageBox.warning(
+                self,
+                "통신 에러",
+                "토크 ON 확인에 실패한 모터가 있어 실제 구동을 중단합니다.\n"
+                f"OFF: {still_off_ids}\n상태 확인 실패: {verify_failed_ids}",
+            )
             return False
 
         self.last_robot_write_time = 0
@@ -1996,14 +3069,20 @@ class SDKMotionEditor(QWidget):
             dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(
                 self.portHandler, j_id, ADDR_PRESENT_POSITION
             )
-            if dxl_comm_result == COMM_SUCCESS and dxl_error == 0:
+            if dxl_comm_result == COMM_SUCCESS:
                 break
         else:
-            if dxl_comm_result != COMM_SUCCESS:
-                print(f"[❌ Read 에러] ID {j_id} 현재 각도 읽기 3회 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
-            else:
-                print(f"[❌ Read 에러] ID {j_id} 상태 패킷 에러: {self.packetHandler.getRxPacketError(dxl_error)}")
+            print(f"[❌ Read 에러] ID {j_id} 현재 각도 읽기 3회 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             return None
+
+        if dxl_error != 0:
+            # Hardware Alert가 있어도 Present Position 데이터 자체는 정상
+            # 수신되므로 시작 자세 계산에는 실제 위치 값을 사용합니다.
+            print(
+                f"[⚠️ 모터 하드웨어 경고] ID {j_id}: "
+                f"{self.packetHandler.getRxPacketError(dxl_error)} "
+                "(현재 위치 값은 정상 수신)"
+            )
 
         if j_id not in self.online_joints:
             self.online_joints.append(j_id)
@@ -2015,15 +3094,28 @@ class SDKMotionEditor(QWidget):
         if not hasattr(self, 'port_opened') or not self.port_opened:
             return None
 
-        torque_value, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(
-            self.portHandler, j_id, ADDR_TORQUE_ENABLE
-        )
+        for attempt in range(3):
+            if attempt > 0:
+                time.sleep(0.005)
+                self.portHandler.clearPort()
+            torque_value, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(
+                self.portHandler, j_id, ADDR_TORQUE_ENABLE
+            )
+            if dxl_comm_result == COMM_SUCCESS:
+                break
+
         if dxl_comm_result != COMM_SUCCESS:
-            print(f"[❌ Read 에러] ID {j_id} 토크 상태 읽기 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
+            print(f"[❌ Read 에러] ID {j_id} 토크 상태 3회 읽기 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             return None
         if dxl_error != 0:
-            print(f"[❌ Read 에러] ID {j_id} 토크 상태 패킷 에러: {self.packetHandler.getRxPacketError(dxl_error)}")
-            return None
+            # Protocol 2.0의 Alert/Hardware Error 비트는 읽기 통신 실패가
+            # 아닙니다. 반환된 Torque Enable 값은 유효하므로 상태 판정에는
+            # 사용하되, 실제 과부하/과열/전압 문제는 별도 경고로 남깁니다.
+            print(
+                f"[⚠️ 모터 하드웨어 경고] ID {j_id}: "
+                f"{self.packetHandler.getRxPacketError(dxl_error)} "
+                f"(토크 상태 값은 정상 수신: {'ON' if torque_value == 1 else 'OFF'})"
+            )
 
         return torque_value == 1
 
@@ -2418,20 +3510,6 @@ class SDKMotionEditor(QWidget):
             self.update_3d_robot()
             print(f"[ℹ️ 프레임 불러오기] '{frame['name']}' 각도를 GUI에 적용했습니다. 토크 ON 모터는 없습니다.")
 
-    def return_to_default_pose(self):
-        default_row = self.find_default_pose_row()
-
-        if default_row < 0:
-            QMessageBox.warning(
-                self,
-                "기본자세 없음",
-                "저장된 프레임에서 '기본자세'를 찾지 못했습니다.\n기본으로 사용할 프레임 이름을 '기본자세'로 변경해 주세요.",
-            )
-            return
-
-        self.frame_list_ui1.setCurrentRow(default_row)
-        self.apply_selected_frame()
-
     def step_frame_apply(self):
         if not self.frame_apply_ids:
             self.frame_apply_timer.stop()
@@ -2453,10 +3531,11 @@ class SDKMotionEditor(QWidget):
             self.frame_apply_timer.stop()
             self.frame_apply_ids = []
             self.frame_apply_on_complete = None
-            self.btn_play_motion_sim.setEnabled(True)
-            self.btn_play_motion_robot.setEnabled(True)
-            self.btn_play_motion_robot.setText("🤖 로봇 실제 구동")
-            self.btn_stop_motion.setEnabled(False)
+            if self.robot_sync_enabled:
+                self.btn_robot_sync.setChecked(False)
+            self.is_playing = False
+            self.is_paused = False
+            self.update_playback_buttons()
             QMessageBox.warning(self, "통신 에러", "프레임 이동 중 모터 전송에 실패했습니다.")
             return
 
@@ -2483,7 +3562,7 @@ class SDKMotionEditor(QWidget):
 
     def add_frame(self):
         duration = self.time_spinbox.value()
-        frame_data = {"name": f"Frame {len(self.frames) + 1}", "time_ms": duration, "angles": self.joints.copy(), "torques": {j: b.isChecked() for j, b in self.torque_btns.items()}, "is_important": False}
+        frame_data = {"frame_id": uuid.uuid4().hex, "name": f"Frame {len(self.frames) + 1}", "time_ms": duration, "angles": self.joints.copy(), "torques": {j: b.isChecked() for j, b in self.torque_btns.items()}, "is_important": False}
         self.frames.append(frame_data)
         item = QListWidgetItem(self.frame_list_ui1)
         custom_widget = FrameItemWidget(frame_data, self)
@@ -2495,13 +3574,49 @@ class SDKMotionEditor(QWidget):
     def update_frame(self):
         row = self.frame_list_ui1.currentRow()
         if row < 0: return QMessageBox.warning(self, "경고", "재저장할 프레임을 선택하세요.")
-        self.frames[row]["angles"] = self.joints.copy()
-        self.frames[row]["torques"] = {j: b.isChecked() for j, b in self.torque_btns.items()} 
-        self.frames[row]["time_ms"] = self.time_spinbox.value()
+        source_frame = self.frames[row]
+        source_frame.setdefault("frame_id", uuid.uuid4().hex)
+        source_frame["angles"] = self.joints.copy()
+        source_frame["torques"] = {j: b.isChecked() for j, b in self.torque_btns.items()}
+        source_frame["time_ms"] = self.time_spinbox.value()
+
+        updated_sequence_frames = 0
+        collections = [self.motion_sequence]
+        collections.extend(seq.get("frames", []) for seq in self.saved_sequences)
+        for frames in collections:
+            for sequence_frame in frames:
+                same_source = sequence_frame.get("frame_id") == source_frame["frame_id"]
+                legacy_name_match = (
+                    not sequence_frame.get("frame_id")
+                    and sequence_frame.get("name") == source_frame.get("name")
+                )
+                if not (same_source or legacy_name_match):
+                    continue
+                sequence_frame["frame_id"] = source_frame["frame_id"]
+                sequence_frame["name"] = source_frame["name"]
+                sequence_frame["angles"] = copy.deepcopy(source_frame["angles"])
+                sequence_frame["torques"] = copy.deepcopy(source_frame["torques"])
+                sequence_frame["time_ms"] = source_frame["time_ms"]
+                updated_sequence_frames += 1
+
+        total_duration = sum(frame['time_ms'] for frame in self.motion_sequence)
+        if total_duration > self.max_seq_ms:
+            self.max_seq_ms = total_duration
+            self.spin_max_time.setValue(self.max_seq_ms)
+        for sequence in self.saved_sequences:
+            sequence_duration = sum(frame['time_ms'] for frame in sequence.get('frames', []))
+            if sequence_duration > sequence.get('max_seq_ms', 0):
+                sequence['max_seq_ms'] = sequence_duration
+        self.resort_motion_sequence()
+        self.refresh_timeline_ui()
         widget = self.frame_list_ui1.itemWidget(self.frame_list_ui1.item(row))
         if widget: widget.label.setText(f"[{self.frames[row]['name']}] {self.frames[row]['time_ms']}ms")
         self.refresh_library_lists()
-        QMessageBox.information(self, "재저장", "프레임이 재저장 되었습니다.")
+        QMessageBox.information(
+            self,
+            "재저장",
+            f"프레임이 재저장되었고 시퀀스 블록 {updated_sequence_frames}개에 바로 반영되었습니다.",
+        )
 
     def rename_frame(self):
         row = self.frame_list_ui1.currentRow()
@@ -2550,14 +3665,64 @@ class SDKMotionEditor(QWidget):
     def on_all_selected(self):
         pass
 
+    def delete_selected_saved_sequence(self):
+        item = self.sequence_list_ui.currentItem()
+        if item is None:
+            return QMessageBox.warning(self, "경고", "삭제할 저장 시퀀스를 선택하세요.")
+        self.delete_saved_sequence(item.data(Qt.UserRole))
+
+    def delete_composer_selected_sequence(self):
+        item = self.composer_source_list.currentItem()
+        if item is None:
+            return QMessageBox.warning(self, "경고", "삭제할 저장 시퀀스를 선택하세요.")
+        self.delete_saved_sequence(item.data(Qt.UserRole))
+
+    def delete_saved_sequence(self, sequence_idx):
+        if sequence_idx is None or not (0 <= sequence_idx < len(self.saved_sequences)):
+            return
+        sequence_name = self.saved_sequences[sequence_idx]['name']
+        reply = QMessageBox.question(
+            self,
+            "시퀀스 삭제",
+            f"저장된 시퀀스 '{sequence_name}'을(를) 삭제하시겠습니까?\n"
+            "이 작업은 되돌릴 수 없습니다.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        self.saved_sequences.pop(sequence_idx)
+
+        remaining_entries = []
+        for entry in self.sequence_composer_entries:
+            entry_idx = entry['sequence_idx']
+            if entry_idx == sequence_idx:
+                continue
+            if entry_idx > sequence_idx:
+                entry['sequence_idx'] = entry_idx - 1
+            remaining_entries.append(entry)
+        self.sequence_composer_entries = remaining_entries
+        self.pack_sequence_composer_entries()
+        self.refresh_sequence_composer_timeline()
+        self.refresh_sequence_list()
+        self.save_persistent_state()
+        QMessageBox.information(self, "삭제 완료", f"'{sequence_name}' 시퀀스를 삭제했습니다.")
+
     def refresh_sequence_list(self):
         if not hasattr(self, 'sequence_list_ui'):
             return
         self.sequence_list_ui.clear()
         for idx, seq in enumerate(self.saved_sequences):
-            item = QListWidgetItem(f"[{idx+1}] {seq['name']} ({len(seq['frames'])} 프레임)")
+            item = QListWidgetItem(
+                f"[{idx+1}] {seq['name']} ({len(seq['frames'])} 프레임 / "
+                f"{seq.get('repeat_count', 1)}회 / {seq.get('playback_speed', 1.0):.1f}x)"
+            )
             item.setData(Qt.UserRole, idx)
             self.sequence_list_ui.addItem(item)
+        self.refresh_composer_source_list()
 
     def refresh_library_lists(self):
         self.frame_list_all.clear()
@@ -2575,6 +3740,8 @@ class SDKMotionEditor(QWidget):
         if fileName:
             export_data = {
                 "max_seq_ms": self.max_seq_ms,
+                "repeat_count": self.spin_motion_repeat.value(),
+                "playback_speed": self.spin_motion_speed.value(),
                 "frames": self.motion_sequence
             }
             with open(fileName, 'w', encoding='utf-8') as f:
