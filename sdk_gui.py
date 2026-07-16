@@ -34,14 +34,42 @@ from dynamixel_sdk import *
 from dynamixel_sdk.protocol2_packet_handler import Protocol2PacketHandler
 
 # 🤖 하드웨어 및 다이나믹셀 통신 주소 세팅 (MX 시리즈 프로토콜 2.0 기준)
+ADDR_FIRMWARE_VERSION       = 6
+ADDR_DRIVE_MODE             = 10
 ADDR_TORQUE_ENABLE          = 64
+ADDR_PROFILE_ACCELERATION   = 108
+ADDR_PROFILE_VELOCITY       = 112
 ADDR_GOAL_POSITION          = 116
 ADDR_PRESENT_POSITION       = 132
+LEN_PROFILE_VALUE           = 4
 LEN_GOAL_POSITION           = 4         
 LEN_PRESENT_POSITION        = 4         
 PROTOCOL_VERSION            = 2.0       
 BAUDRATE                    = 4000000   
 DEVICENAME                  = '/dev/ttyUSB0' # (자동 탐색기가 완전히 실패했을 때의 최후의 백업 포트)
+
+# MX(2.0) 펌웨어 V42+에서는 Drive Mode bit 2를 켜면 Profile Velocity가
+# 속도 제한값이 아니라 Goal Position 도착시간(ms)이 됩니다. 프레임마다
+# 이 시간을 지정하고 최종 각도를 한 번만 전송해 모터 내부 제어기가 해당
+# 시간에 맞춰 속도를 자동으로 정하도록 합니다.
+DRIVE_MODE_TIME_BASED_BIT   = 0x04
+MIN_TIME_PROFILE_FIRMWARE   = 42
+MAX_TIME_PROFILE_MS         = 32737
+TIMED_FEEDBACK_FREQUENCY_HZ = 100
+TIMED_FEEDBACK_INTERVAL_SEC = 1.0 / TIMED_FEEDBACK_FREQUENCY_HZ
+
+# 타임라인 목표를 200Hz로 평가합니다. 실기 시퀀스는 프레임 시작마다 최종
+# Goal과 도착시간을 한 번 보내고, 모터 내부 프로파일이 더 높은 내부 주기로
+# 움직입니다. 수동/호환 경로만 200Hz 중간 Goal 전송을 사용합니다.
+# Qt 이벤트 루프는 실시간 스케줄러가 아니므로 실제 주기에 지터는 있을 수
+# 있지만, 모노토닉 시간을 사용해 누적 타임라인 오차가 생기지 않게 합니다.
+CONTROL_FREQUENCY_HZ        = 200
+CONTROL_INTERVAL_MS         = int(round(1000.0 / CONTROL_FREQUENCY_HZ))
+PLAYBACK_UI_INTERVAL_SEC    = 1.0 / 30.0
+# 피드백/FK는 시간 프로파일을 방해하지 않도록 100Hz에서 읽고, 터미널 I/O는
+# 제어 루프를 지연시키지 않도록 요약 출력만 10Hz로 제한합니다.
+FK_ERROR_LOG_FREQUENCY_HZ   = 10
+FK_ERROR_LOG_INTERVAL_SEC   = 1.0 / FK_ERROR_LOG_FREQUENCY_HZ
 
 # DYNAMIXEL absolute position 기준: 0~4095, 2048이 중립, 4096 step/rev.
 DXL_POSITION_RESOLUTION     = 4096
@@ -203,7 +231,13 @@ class TimelineBlockWidget(QFrame):
         top_layout.addWidget(btn_del)
         
         self.spinbox = QSpinBox()
-        self.spinbox.setRange(10, self.parent_gui.max_seq_ms)
+        # 뒤 프레임을 함께 밀면서 타임라인 자체도 늘릴 수 있어야 하므로 현재
+        # max_seq_ms가 아니라 전체 허용 범위(60초)까지 입력을 받습니다.
+        max_duration_ms = max(
+            MIN_TIMELINE_FRAME_MS,
+            60000 - int(frame_data['start_ms']),
+        )
+        self.spinbox.setRange(MIN_TIMELINE_FRAME_MS, max_duration_ms)
         self.spinbox.setValue(frame_data['time_ms'])
         self.spinbox.setSuffix(" ms")
         self.spinbox.setStyleSheet("font-size: 10pt; border: 1px solid #777; background: #222; color: white; padding: 2px;")
@@ -243,10 +277,9 @@ class TimelineBlockWidget(QFrame):
             prev_f = seq[idx-1]
             self.resize_min_x = int((prev_f['start_ms'] + prev_f['time_ms']) * self.parent_gui.SCALE)
 
-        self.resize_max_x = int(self.parent_gui.max_seq_ms * self.parent_gui.SCALE)
-        if idx != -1 and idx < len(seq) - 1:
-            next_f = seq[idx+1]
-            self.resize_max_x = int(next_f['start_ms'] * self.parent_gui.SCALE)
+        # 오른쪽 길이 조절은 다음 프레임에 막히지 않습니다. 놓는 순간 길이
+        # 변화량만큼 다음 프레임들을 전부 이동해 기존 간격을 보존합니다.
+        self.resize_max_x = int(60000 * self.parent_gui.SCALE)
 
         self.move_min_x = self.resize_min_x
         self.move_max_x = self.resize_max_x - self.width()
@@ -260,6 +293,8 @@ class TimelineBlockWidget(QFrame):
 
             if self.drag_mode == 'move':
                 self.frame_data['_drag_original_start_ms'] = self.frame_data['start_ms']
+            elif self.drag_mode == 'resize_right':
+                self.resize_original_duration_ms = int(self.frame_data['time_ms'])
                 
             self.drag_start_global_x = event.globalX()
             self.start_x = self.x()
@@ -331,23 +366,56 @@ class TimelineBlockWidget(QFrame):
             self.setCursor(Qt.ArrowCursor)
             if released_mode == 'move':
                 self.parent_gui.reorder_motion_frame(self.frame_data, self.x())
+            elif released_mode == 'resize_right':
+                old_duration_ms = getattr(
+                    self,
+                    'resize_original_duration_ms',
+                    int(self.frame_data['time_ms']),
+                )
+                new_duration_ms = int(self.frame_data['time_ms'])
+                if not self.parent_gui.change_motion_frame_duration(
+                    self.frame_data,
+                    new_duration_ms,
+                    old_duration_ms=old_duration_ms,
+                ):
+                    self.frame_data['time_ms'] = old_duration_ms
+                    QMessageBox.warning(
+                        self,
+                        "시간 초과",
+                        "뒤 프레임까지 이동하면 최대 시퀀스 길이 60000ms를 "
+                        "초과하여 원래 시간으로 복구했습니다.",
+                    )
             else:
                 self.parent_gui.resort_motion_sequence()
             self.parent_gui.refresh_timeline_ui()
 
     def clamp_time_val(self, val):
-        self.calculate_bounds()
-        max_allowed_ms = int((self.resize_max_x - self.x()) / self.parent_gui.SCALE)
-        return min(val, max_allowed_ms)
+        max_allowed_ms = max(
+            MIN_TIMELINE_FRAME_MS,
+            60000 - int(self.frame_data['start_ms']),
+        )
+        return max(MIN_TIMELINE_FRAME_MS, min(val, max_allowed_ms))
 
     def apply_spinbox_time(self):
         self.spinbox.interpretText()
-        val = self.spinbox.value()
-        val = self.clamp_time_val(val) 
+        old_duration_ms = int(self.frame_data['time_ms'])
+        val = self.clamp_time_val(self.spinbox.value())
+        changed = self.parent_gui.change_motion_frame_duration(
+            self.frame_data,
+            val,
+            old_duration_ms=old_duration_ms,
+        )
+        if not changed:
+            val = old_duration_ms
+            QMessageBox.warning(
+                self,
+                "시간 초과",
+                "뒤 프레임까지 이동하면 최대 시퀀스 길이 60000ms를 "
+                "초과하여 원래 시간으로 복구했습니다.",
+            )
         self.spinbox.blockSignals(True)
         self.spinbox.setValue(val)
         self.spinbox.blockSignals(False)
-        self.frame_data['time_ms'] = val
         self.parent_gui.refresh_timeline_ui()
 
     def apply_gap_time(self):
@@ -707,9 +775,10 @@ class SimpleURDFModel:
         self.triangle_count = 0
         self.bounds_min = None
         self.bounds_max = None
+        self.end_effector_links = []
 
     @classmethod
-    def load(cls, urdf_path):
+    def load(cls, urdf_path, load_visuals=True):
         import numpy as np
 
         model = cls()
@@ -719,6 +788,8 @@ class SimpleURDFModel:
         for link in root.findall("link"):
             link_name = link.get("name")
             model.links.add(link_name)
+            if not load_visuals:
+                continue
             for visual in link.findall("visual"):
                 origin = visual.find("origin")
                 xyz = _parse_vec3(origin.get("xyz") if origin is not None else None)
@@ -782,6 +853,7 @@ class SimpleURDFModel:
 
         root_candidates = sorted(model.links - child_links)
         model.root_link = root_candidates[0] if root_candidates else "base_link"
+        model.end_effector_links = sorted(child_links - set(model.children.keys()))
         model.triangle_count = sum(len(triangles) for triangles in model.mesh_cache.values())
         model._compute_bounds()
         return model
@@ -994,20 +1066,22 @@ class SDKMotionEditor(QWidget):
         self.state_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), STATE_FILENAME)
         
         self.anim_timer = QTimer(self)
+        self.anim_timer.setTimerType(Qt.PreciseTimer)
+        self.anim_timer.setInterval(CONTROL_INTERVAL_MS)
         self.anim_timer.timeout.connect(self.anim_step)
         self.live_angle_timer = QTimer(self)
         self.live_angle_timer.setInterval(100)
         self.live_angle_timer.timeout.connect(self.refresh_live_joint_angles)
         self.live_angle_read_failures = 0
         self.robot_scrub_timer = QTimer(self)
-        self.robot_scrub_timer.setInterval(30)
+        self.robot_scrub_timer.setTimerType(Qt.PreciseTimer)
+        self.robot_scrub_timer.setInterval(CONTROL_INTERVAL_MS)
         self.robot_scrub_timer.timeout.connect(self.step_robot_scrub)
         self.robot_scrub_target_angles = {}
         self.robot_scrub_command_angles = {}
-        self.robot_scrub_last_time = 0.0
-        self.robot_scrub_speed_deg_per_sec = 45.0
         self.frame_apply_timer = QTimer(self)
-        self.frame_apply_timer.setInterval(30)
+        self.frame_apply_timer.setTimerType(Qt.PreciseTimer)
+        self.frame_apply_timer.setInterval(CONTROL_INTERVAL_MS)
         self.frame_apply_timer.timeout.connect(self.step_frame_apply)
         self.frame_apply_start_time = 0.0
         self.frame_apply_duration = 0.5
@@ -1028,10 +1102,14 @@ class SDKMotionEditor(QWidget):
         self.anim_start_time = 0
         self.anim_duration = 0
         self.start_angles = {}
+        self.last_playback_ui_time = 0.0
+        self.time_based_profile_ids = set()
+        self.active_timed_frame_token = None
+        self.last_timed_feedback_time = 0.0
+        self.timed_profile_error_reported = False
         
         self.execute_on_real_robot = False
         self.robot_sync_enabled = False
-        self.last_robot_write_time = 0
         
         self.joint_data = [
             {"id": 0, "name": "Head_Pan", "type": "28"}, {"id": 1, "name": "Head_Tilt", "type": "28"},
@@ -1058,12 +1136,26 @@ class SDKMotionEditor(QWidget):
             21: "R_Leg_ankle_roll", 22: "L_Leg_ankle_roll"
         }
         
+        # 좌우반전은 하체 관절만 적용합니다. 각 쌍은 좌우 값을 교환하면서
+        # 부호를 반전하고, 머리/팔/허리 등 여기에 없는 관절은 그대로 둡니다.
         self.mirror_map = {
-            2: (3, -1), 4: (5, -1), 6: (7, -1), 8: (9, -1), 10: (12, -1), 
-            13: (14, -1), 15: (16, -1), 17: (18, -1), 19: (20, -1), 21: (22, -1)  
+            10: (12, -1),
+            15: (16, -1),
+            21: (22, -1),
+            13: (14, -1),
+            17: (18, -1),
+            19: (20, -1),
         }
         
         self.joints = {joint["id"]: 0 for joint in self.joint_data}
+        self.feedback_angles = self.joints.copy()
+        self.commanded_angles = self.joints.copy()
+        self.commanded_joint_ids = set()
+        self.fk_feedback_sample_count = 0
+        self.fk_feedback_read_failures = 0
+        self.last_fk_error_log_time = 0.0
+        self.last_fk_read_error_log_time = 0.0
+        self.editing_loaded_pose = False
         self.sliders = {}
         self.spinboxes = {}
         self.torque_btns = {}
@@ -1089,6 +1181,24 @@ class SDKMotionEditor(QWidget):
         self.groupSyncWrite = GroupSyncWrite(self.portHandler, self.packetHandler, ADDR_GOAL_POSITION, LEN_GOAL_POSITION)
         self.groupSyncRead = GroupSyncRead(self.portHandler, self.packetHandler, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION)
         self.groupSyncWriteTorque = GroupSyncWrite(self.portHandler, self.packetHandler, ADDR_TORQUE_ENABLE, 1)
+        self.groupSyncWriteDriveMode = GroupSyncWrite(
+            self.portHandler,
+            self.packetHandler,
+            ADDR_DRIVE_MODE,
+            1,
+        )
+        self.groupSyncWriteProfileAcceleration = GroupSyncWrite(
+            self.portHandler,
+            self.packetHandler,
+            ADDR_PROFILE_ACCELERATION,
+            LEN_PROFILE_VALUE,
+        )
+        self.groupSyncWriteProfileVelocity = GroupSyncWrite(
+            self.portHandler,
+            self.packetHandler,
+            ADDR_PROFILE_VELOCITY,
+            LEN_PROFILE_VALUE,
+        )
 
         self.port_opened = False
         if self.portHandler.openPort():
@@ -1147,6 +1257,170 @@ class SDKMotionEditor(QWidget):
                     print(f"   🔴 ID {j_id:02d} - 오프라인 (미응답)")
         print(f"📊 [감지 완료] 총 {len(self.online_joints)}/23 관절이 통신 가능 상태입니다.")
 
+    @staticmethod
+    def dxl_u32_param(value):
+        value = max(0, min(0xFFFFFFFF, int(value)))
+        return [
+            DXL_LOBYTE(DXL_LOWORD(value)),
+            DXL_HIBYTE(DXL_LOWORD(value)),
+            DXL_LOBYTE(DXL_HIWORD(value)),
+            DXL_HIBYTE(DXL_HIWORD(value)),
+        ]
+
+    def read_1byte_register(self, j_id, address):
+        """초기 설정용 1바이트 레지스터를 패킷 오류 시 재시도해 읽습니다."""
+        for attempt in range(3):
+            if attempt > 0:
+                time.sleep(0.005)
+                self.portHandler.clearPort()
+            value, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(
+                self.portHandler,
+                int(j_id),
+                int(address),
+            )
+            if dxl_comm_result == COMM_SUCCESS:
+                if dxl_error != 0:
+                    print(
+                        f"[⚠️ 설정 레지스터 읽기 중 모터 경고] ID {j_id}: "
+                        f"{self.packetHandler.getRxPacketError(dxl_error)}"
+                    )
+                return int(value)
+        return None
+
+    def configure_unlimited_motor_profiles(self, target_ids=None):
+        """MX Protocol 2.0의 내부 속도/가속도 프로파일 제한을 해제합니다."""
+        if not self.port_opened:
+            return False
+
+        ids = sorted(set(self.online_joints if target_ids is None else target_ids))
+        if not ids:
+            return False
+
+        zero_profile = self.dxl_u32_param(0)
+        profile_writers = (
+            ("가속도", self.groupSyncWriteProfileAcceleration),
+            ("속도", self.groupSyncWriteProfileVelocity),
+        )
+        for profile_name, writer in profile_writers:
+            writer.clearParam()
+            added_count = 0
+            for j_id in ids:
+                if writer.addParam(int(j_id), zero_profile):
+                    added_count += 1
+                else:
+                    print(f"[❌ 프로파일 설정 준비 실패] ID {j_id} {profile_name}")
+
+            if added_count != len(ids):
+                return False
+
+            dxl_comm_result = writer.txPacket()
+            if dxl_comm_result != COMM_SUCCESS:
+                print(
+                    f"[❌ 프로파일 설정 실패] {profile_name}: "
+                    f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+                )
+                return False
+
+        print(
+            f"[✅ 모터 프로파일 초기화] ID {ids} Profile Acceleration/Velocity = 0"
+        )
+        return True
+
+    def configure_time_based_drive_mode(self, target_ids=None):
+        """토크 OFF 상태의 MX를 프레임 도착시간 기반 프로파일로 설정합니다."""
+        if not self.port_opened:
+            return False
+
+        ids = sorted(set(self.online_joints if target_ids is None else target_ids))
+        if not ids:
+            return False
+        if set(ids).issubset(self.time_based_profile_ids):
+            return self.configure_unlimited_motor_profiles(ids)
+
+        drive_modes = {}
+        unsupported_ids = []
+        read_failed_ids = []
+        for j_id in ids:
+            firmware = self.read_1byte_register(j_id, ADDR_FIRMWARE_VERSION)
+            drive_mode = self.read_1byte_register(j_id, ADDR_DRIVE_MODE)
+            if firmware is None or drive_mode is None:
+                read_failed_ids.append(j_id)
+                continue
+            if firmware < MIN_TIME_PROFILE_FIRMWARE:
+                unsupported_ids.append((j_id, firmware))
+                continue
+            drive_modes[j_id] = drive_mode
+
+        if read_failed_ids:
+            print(f"[❌ 시간 프로파일 확인 실패] 레지스터 읽기 실패 ID {read_failed_ids}")
+            return False
+        if unsupported_ids:
+            print(
+                "[❌ 시간 프로파일 미지원] 펌웨어 V42 이상 필요: "
+                + ", ".join(f"ID {j_id}=V{version}" for j_id, version in unsupported_ids)
+            )
+            return False
+
+        change_ids = [
+            j_id for j_id, drive_mode in drive_modes.items()
+            if not (drive_mode & DRIVE_MODE_TIME_BASED_BIT)
+        ]
+        if change_ids:
+            # Drive Mode(10)은 EEPROM이므로 이 함수는 토크 OFF 이후에만 호출합니다.
+            self.groupSyncWriteDriveMode.clearParam()
+            for j_id in change_ids:
+                new_mode = drive_modes[j_id] | DRIVE_MODE_TIME_BASED_BIT
+                if not self.groupSyncWriteDriveMode.addParam(j_id, [new_mode]):
+                    print(f"[❌ 시간 프로파일 설정 준비 실패] ID {j_id}")
+                    return False
+            dxl_comm_result = self.groupSyncWriteDriveMode.txPacket()
+            if dxl_comm_result != COMM_SUCCESS:
+                print(
+                    "[❌ 시간 프로파일 Drive Mode 설정 실패] "
+                    f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+                )
+                return False
+            # EEPROM 기록이 완료된 뒤 실제 bit가 들어갔는지 검증합니다.
+            time.sleep(0.02)
+
+        verify_failed_ids = []
+        for j_id in ids:
+            drive_mode = self.read_1byte_register(j_id, ADDR_DRIVE_MODE)
+            if drive_mode is None or not (drive_mode & DRIVE_MODE_TIME_BASED_BIT):
+                verify_failed_ids.append(j_id)
+        if verify_failed_ids:
+            print(f"[❌ 시간 프로파일 검증 실패] ID {verify_failed_ids}")
+            return False
+
+        if not self.configure_unlimited_motor_profiles(ids):
+            return False
+
+        self.time_based_profile_ids.update(ids)
+        print(f"[✅ 시간 기반 프로파일 준비] ID {ids} Drive Mode bit2=1")
+        return True
+
+    def set_time_profile_duration(self, target_ids, duration_ms):
+        """동일 프레임에 참여하는 모터의 실제 도착시간을 ms 단위로 지정합니다."""
+        ids = sorted(set(int(j_id) for j_id in target_ids))
+        if not ids or not set(ids).issubset(self.time_based_profile_ids):
+            return False
+
+        duration_ms = max(1, min(MAX_TIME_PROFILE_MS, int(math.ceil(duration_ms))))
+        duration_param = self.dxl_u32_param(duration_ms)
+        self.groupSyncWriteProfileVelocity.clearParam()
+        for j_id in ids:
+            if not self.groupSyncWriteProfileVelocity.addParam(j_id, duration_param):
+                print(f"[❌ 도착시간 설정 준비 실패] ID {j_id}")
+                return False
+        dxl_comm_result = self.groupSyncWriteProfileVelocity.txPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            print(
+                f"[❌ 도착시간 설정 실패] {duration_ms}ms: "
+                f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+            )
+            return False
+        return True
+
     # 🚀 [완벽 수정 2] 부팅 시 감지된 관절의 실시간 각도를 일괄 매핑시킵니다.
     def sync_initial_angles(self):
         if not self.online_joints: 
@@ -1165,13 +1439,19 @@ class SDKMotionEditor(QWidget):
                     dxl_present_position = self.groupSyncRead.getData(j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION)
                     angle_deg = self.dxl_position_to_angle(dxl_present_position)
                     self.update_joint_display(j_id, angle_deg, update_robot=False)
+                    self.feedback_angles[j_id] = angle_deg
+                    self.commanded_angles[j_id] = angle_deg
+                    self.commanded_joint_ids.add(j_id)
             self.update_3d_robot()
         else:
             print(f"   [⚠️ 경고] 기동 시 로봇 각도 읽기 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
 
     def refresh_live_joint_angles(self):
         """토크 ON/OFF와 무관하게 온라인 관절의 실제 각도를 갱신합니다."""
-        if not self.port_opened or not self.online_joints:
+        # 모션/프레임 제어 중에는 전용 실기 피드백 경로가 읽고 있으므로,
+        # 100ms 라이브 타이머의 중복 읽기만 건너뜁니다.
+        if (not self.port_opened or not self.online_joints or self.is_playing
+                or self.frame_apply_timer.isActive()):
             return
 
         self.groupSyncRead.clearParam()
@@ -1198,7 +1478,11 @@ class SDKMotionEditor(QWidget):
                 j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
             )
             angle_deg = self.dxl_position_to_angle(dxl_present_position)
-            self.update_joint_display(j_id, angle_deg, update_robot=False)
+            self.feedback_angles[j_id] = angle_deg
+            # 저장 자세를 불러와 편집 중일 때는 실기 피드백이 입력값을
+            # 100ms마다 덮어쓰지 않게 하고, 실제각은 feedback에만 보관합니다.
+            if not self.editing_loaded_pose:
+                self.update_joint_display(j_id, angle_deg, update_robot=False)
 
     def set_joint_connection_ui(self, j_id, is_online, torque_on=False):
         if j_id not in self.torque_btns:
@@ -1217,10 +1501,12 @@ class SDKMotionEditor(QWidget):
         else:
             btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
 
+        # 각도 편집은 토크 상태와 분리합니다. 토크 OFF에서는 GUI/프레임 값만
+        # 바뀌고, 실제 Goal Position 전송은 sync_values에서 계속 차단됩니다.
         if j_id in self.sliders:
-            self.sliders[j_id].setEnabled(is_online and torque_on)
+            self.sliders[j_id].setEnabled(is_online)
         if j_id in self.spinboxes:
-            self.spinboxes[j_id].setEnabled(is_online and torque_on)
+            self.spinboxes[j_id].setEnabled(is_online)
 
         btn.blockSignals(False)
 
@@ -1410,7 +1696,20 @@ class SDKMotionEditor(QWidget):
         self.urdf_error = ""
         self.urdf_viewers = []
         self.robot_model = None
-        print("[3D 비활성화] URDF 로딩을 건너뜁니다.")
+        urdf_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "step.urdf")
+        try:
+            # FK에는 메시가 필요 없으므로 용량이 큰 STL은 로드하지 않고
+            # 링크/조인트 트리와 origin/axis만 로드합니다.
+            self.robot_model = SimpleURDFModel.load(urdf_path, load_visuals=False)
+            self.urdf_loaded = True
+            print(
+                "[FK 로딩 완료] "
+                f"root={self.robot_model.root_link}, "
+                f"end-effectors={self.robot_model.end_effector_links}"
+            )
+        except Exception as exc:
+            self.urdf_error = str(exc)
+            print(f"[❌ FK 로딩 실패] {urdf_path}: {exc}")
 
     def init_3d_viewer(self):
         blank = QWidget()
@@ -2251,6 +2550,61 @@ class SDKMotionEditor(QWidget):
     def frame_gap_ms(self, target_frame):
         return max(0, target_frame['start_ms'] - self.previous_frame_end_ms(target_frame))
 
+    @staticmethod
+    def shift_following_frames_for_duration(frames, target_frame, new_duration_ms, old_duration_ms=None):
+        """프레임 길이 변화량만큼 뒤 프레임 전체를 이동해 기존 간격을 보존합니다."""
+        ordered = sorted(frames, key=lambda frame: frame['start_ms'])
+        index = next(
+            (idx for idx, frame in enumerate(ordered) if frame is target_frame),
+            -1,
+        )
+        if index < 0:
+            return False, 0, 0
+
+        old_duration_ms = int(
+            target_frame.get('time_ms', MIN_TIMELINE_FRAME_MS)
+            if old_duration_ms is None else old_duration_ms
+        )
+        new_duration_ms = max(MIN_TIMELINE_FRAME_MS, int(new_duration_ms))
+        delta_ms = new_duration_ms - old_duration_ms
+
+        proposed_end_ms = target_frame['start_ms'] + new_duration_ms
+        for frame in ordered[index + 1:]:
+            proposed_end_ms = max(
+                proposed_end_ms,
+                frame['start_ms'] + delta_ms + frame['time_ms'],
+            )
+        if proposed_end_ms > 60000:
+            return False, delta_ms, proposed_end_ms
+
+        target_frame['time_ms'] = new_duration_ms
+        if delta_ms:
+            for frame in ordered[index + 1:]:
+                frame['start_ms'] += delta_ms
+        return True, delta_ms, proposed_end_ms
+
+    def change_motion_frame_duration(self, target_frame, new_duration_ms, old_duration_ms=None):
+        """타임라인 프레임 시간 변경을 적용하고 뒤 프레임을 함께 이동합니다."""
+        changed, delta_ms, final_end_ms = self.shift_following_frames_for_duration(
+            self.motion_sequence,
+            target_frame,
+            new_duration_ms,
+            old_duration_ms=old_duration_ms,
+        )
+        if not changed:
+            return False
+
+        if final_end_ms > self.max_seq_ms:
+            self.max_seq_ms = final_end_ms
+            self.spin_max_time.setValue(final_end_ms)
+        self.motion_sequence.sort(key=lambda frame: frame['start_ms'])
+        if delta_ms:
+            print(
+                f"[↔️ 프레임 시간 변경] '{target_frame.get('name', 'Frame')}' "
+                f"{delta_ms:+d}ms -> 뒤 프레임 전체 동일 이동"
+            )
+        return True
+
     def reorder_motion_frame(self, moved_frame, moved_x):
         """빈 위치는 유지하고, 충돌 위치 삽입 시 뒤 블록만 필요한 만큼 밉니다."""
         duration = max(MIN_TIMELINE_FRAME_MS, int(moved_frame['time_ms']))
@@ -2609,6 +2963,8 @@ class SDKMotionEditor(QWidget):
                 self.composer_btn_sync.blockSignals(False)
             print("[🔗 로봇 동기화 ON] 재생 및 타임라인 탐색 자세를 실제 로봇에 전송합니다.")
         else:
+            if self.is_playing:
+                self.hold_timed_motion_at_feedback()
             self.robot_sync_enabled = False
             self.execute_on_real_robot = False
             self.robot_scrub_timer.stop()
@@ -2645,6 +3001,9 @@ class SDKMotionEditor(QWidget):
             return False
 
         self.update_3d_robot()
+        self.feedback_angles.update(actual_angles)
+        self.commanded_angles.update(actual_angles)
+        self.commanded_joint_ids.update(actual_angles.keys())
         self.robot_scrub_command_angles = actual_angles.copy()
         self.robot_scrub_target_angles = actual_angles.copy()
         print(f"[✅ 시작 자세 동기화] 실제 로봇 관절 {len(actual_angles)}개의 현재 자세를 사용합니다.")
@@ -2696,24 +3055,29 @@ class SDKMotionEditor(QWidget):
         self.anim_duration = max(
             f['start_ms'] + f['time_ms'] for f in self.motion_sequence
         ) / 1000.0
-        # 재생 시작에는 별도의 기본/준비 자세를 사용하지 않습니다. 첫 번째
-        # 타임라인 프레임을 시작 자세로 삼아 저장된 키프레임만 재생합니다.
-        if not resuming:
-            first_frame = min(self.motion_sequence, key=lambda f: f['start_ms'])
+        # 첫 프레임의 time_ms도 실제 이동시간입니다. 읽어 둔 실기 시작자세를
+        # 첫 목표각으로 덮어쓰면 첫 프레임이 보간되지 않고 즉시 점프하므로,
+        # 현재 자세를 그대로 시작점으로 유지합니다.
+        if not resuming or not self.start_angles:
             self.start_angles = self.joints.copy()
-            self.start_angles.update(self.normalize_angles(first_frame.get('angles', {})))
+        self.active_timed_frame_token = None
+        self.last_timed_feedback_time = 0.0
+        self.timed_profile_error_reported = False
+        now = time.perf_counter()
         self.anim_start_time = (
-            time.time() - self.current_timeline_ms / (1000.0 * self.playback_speed)
+            now - self.current_timeline_ms / (1000.0 * self.playback_speed)
         )
-        self.anim_timer.start(16)
+        self.last_playback_ui_time = 0.0
+        self.anim_timer.start()
 
     def pause_motion_sequence(self):
         if not self.is_playing:
             return
         self.current_timeline_ms = max(
             0,
-            int((time.time() - self.anim_start_time) * 1000 * self.playback_speed),
+            int((time.perf_counter() - self.anim_start_time) * 1000 * self.playback_speed),
         )
+        self.hold_timed_motion_at_feedback()
         self.is_playing = False
         self.is_paused = True
         self.anim_timer.stop()
@@ -2728,7 +3092,7 @@ class SDKMotionEditor(QWidget):
         return -1
 
     def return_to_default_pose(self):
-        """사용자가 버튼을 눌렀을 때만 기본자세 프레임을 천천히 적용합니다."""
+        """사용자가 버튼을 눌렀을 때만 기본자세 프레임을 저장 시간대로 적용합니다."""
         default_row = self.find_default_pose_row()
         if default_row < 0:
             QMessageBox.warning(
@@ -2744,30 +3108,41 @@ class SDKMotionEditor(QWidget):
 
     def anim_step(self):
         if not self.is_playing: return
-        elapsed_sec = time.time() - self.anim_start_time
+        now = time.perf_counter()
+        elapsed_sec = now - self.anim_start_time
         t_ms = int(elapsed_sec * 1000 * self.playback_speed)
         self.current_timeline_ms = t_ms
 
-        if self.playback_context == "composer":
-            playhead_px = int(t_ms * self.COMPOSER_SCALE)
-            self.composer_timeline_container.set_playhead(True, playhead_px)
-            self.composer_timeline_scroll.ensureVisible(
-                playhead_px, self.composer_timeline_scroll.height() // 2, 50, 0
-            )
-        else:
-            playhead_px = int(t_ms * self.SCALE)
-            self.timeline_container.set_playhead(True, playhead_px)
-            self.timeline_scroll.ensureVisible(playhead_px, self.timeline_scroll.height()//2, 50, 0)
+        # 플레이헤드/스타일 갱신은 30fps로 제한해 GUI 렌더링이
+        # 200Hz 타임라인 평가와 프레임 경계 전송을 막지 않게 합니다.
+        update_visuals = now - self.last_playback_ui_time >= PLAYBACK_UI_INTERVAL_SEC
+        if update_visuals:
+            self.last_playback_ui_time = now
+            if self.playback_context == "composer":
+                playhead_px = int(t_ms * self.COMPOSER_SCALE)
+                self.composer_timeline_container.set_playhead(True, playhead_px)
+                self.composer_timeline_scroll.ensureVisible(
+                    playhead_px, self.composer_timeline_scroll.height() // 2, 50, 0
+                )
+            else:
+                playhead_px = int(t_ms * self.SCALE)
+                self.timeline_container.set_playhead(True, playhead_px)
+                self.timeline_scroll.ensureVisible(playhead_px, self.timeline_scroll.height()//2, 50, 0)
         
         if t_ms >= int(self.anim_duration * 1000):
-            if self.motion_sequence:
-                last_frame = max(self.motion_sequence, key=lambda f: f['start_ms'] + f['time_ms'])
-                self.apply_to_real_robot(last_frame['angles'], force=True)
+            end_ms = int(self.anim_duration * 1000)
+            last_frame = max(self.motion_sequence, key=lambda f: f['start_ms'] + f['time_ms'])
+            # 일반 200Hz tick이 종점 직전에 끝나더라도 마지막 키프레임을
+            # 반드시 보간/전송해 종점 명령 누락을 막습니다.
+            self.current_timeline_ms = end_ms
+            self.scrub_timeline(end_ms, force_robot=True, update_visuals=True)
             if self.playback_repeat_current < self.playback_repeat_target:
                 self.playback_repeat_current += 1
                 self.current_timeline_ms = 0
-                self.anim_start_time = time.time()
+                self.anim_start_time = time.perf_counter()
                 self.start_angles.update(self.normalize_angles(last_frame.get('angles', {})))
+                self.active_timed_frame_token = None
+                self.last_timed_feedback_time = 0.0
                 if self.playback_context == "composer":
                     self.composer_timeline_container.set_playhead(True, 0)
                     self.composer_timeline_scroll.horizontalScrollBar().setValue(0)
@@ -2776,13 +3151,17 @@ class SDKMotionEditor(QWidget):
                     self.timeline_scroll.horizontalScrollBar().setValue(0)
                 self.update_playback_buttons()
                 return
-            self.stop_motion_sequence()
+            # 마지막 프레임의 시간 프로파일이 종점까지 계속 동작해야 하므로
+            # 자연 종료에서는 현재각으로 덮어써 모터를 중간에 멈추지 않습니다.
+            self.stop_motion_sequence(keep_timed_goal=True)
             return
 
-        self.scrub_timeline(t_ms)
+        self.scrub_timeline(t_ms, update_visuals=update_visuals)
 
-    def stop_motion_sequence(self):
+    def stop_motion_sequence(self, _checked=False, keep_timed_goal=False):
         stopped_context = self.playback_context
+        if self.is_playing and not keep_timed_goal:
+            self.hold_timed_motion_at_feedback()
         self.is_playing = False
         self.is_paused = False
         self.current_timeline_ms = 0
@@ -2792,6 +3171,8 @@ class SDKMotionEditor(QWidget):
         self.frame_apply_timer.stop()
         self.frame_apply_ids = []
         self.frame_apply_on_complete = None
+        self.active_timed_frame_token = None
+        self.last_timed_feedback_time = 0.0
         self.execute_on_real_robot = self.robot_sync_enabled
         self.timeline_container.set_playhead(True, 0)
         if hasattr(self, 'composer_timeline_container'):
@@ -2804,26 +3185,36 @@ class SDKMotionEditor(QWidget):
         for child in self.timeline_container.findChildren(TimelineBlockWidget):
             child.set_default_style()
 
-    def scrub_timeline(self, t_ms, force_robot=False):
+    def scrub_timeline(self, t_ms, force_robot=False, update_visuals=True):
         self.current_timeline_ms = max(0, min(int(t_ms), self.max_seq_ms))
         if not self.is_playing:
             self.is_paused = self.current_timeline_ms > 0
             self.update_playback_buttons()
         active_frame = None
         last_completed = None
-        
+        sequence_end_ms = max(
+            (f['start_ms'] + f['time_ms'] for f in self.motion_sequence),
+            default=0,
+        )
+
         for f in self.motion_sequence:
-            if f['start_ms'] <= t_ms <= f['start_ms'] + f['time_ms']:
+            frame_start_ms = f['start_ms']
+            frame_end_ms = frame_start_ms + f['time_ms']
+            # 인접 프레임 경계는 [start, end)로 판정해야 새 프레임이 정확히
+            # 그 경계 tick에서 시작합니다. 시퀀스 최종점만 마지막 프레임에 포함합니다.
+            if (frame_start_ms <= t_ms < frame_end_ms
+                    or (t_ms == sequence_end_ms == frame_end_ms)):
                 active_frame = f
                 break
-            if f['start_ms'] + f['time_ms'] < t_ms:
-                if not last_completed or (f['start_ms'] + f['time_ms']) > (last_completed['start_ms'] + last_completed['time_ms']):
+            if frame_end_ms <= t_ms:
+                if not last_completed or frame_end_ms > (last_completed['start_ms'] + last_completed['time_ms']):
                     last_completed = f
 
-        idx_to_highlight = self.motion_sequence.index(active_frame) if active_frame else -1
-        for child in self.timeline_container.findChildren(TimelineBlockWidget):
-            if child.seq_idx == idx_to_highlight: child.set_playing_style()
-            else: child.set_default_style()
+        if update_visuals:
+            idx_to_highlight = self.motion_sequence.index(active_frame) if active_frame else -1
+            for child in self.timeline_container.findChildren(TimelineBlockWidget):
+                if child.seq_idx == idx_to_highlight: child.set_playing_style()
+                else: child.set_default_style()
 
         target_angles_to_render = {}
         if active_frame:
@@ -2847,24 +3238,53 @@ class SDKMotionEditor(QWidget):
             if last_completed: target_angles_to_render = self.normalize_angles(last_completed['angles'])
             else: target_angles_to_render = self.joints.copy()
             
-        self.update_3d_robot(target_angles_to_render)
+        if update_visuals:
+            self.update_3d_robot(target_angles_to_render)
         
         if self.is_playing:
-            self.apply_to_real_robot(target_angles_to_render, force=force_robot)
+            sequence_ids = self.sequence_joint_ids() & set(self.online_joints)
+            use_time_profile = (
+                self.execute_on_real_robot
+                and bool(sequence_ids)
+                and sequence_ids.issubset(self.time_based_profile_ids)
+            )
+            if use_time_profile:
+                frame_sent = False
+                if active_frame is not None:
+                    command_ok, frame_sent = self.command_time_profile_frame(active_frame, t_ms)
+                    if not command_ok:
+                        if not self.timed_profile_error_reported:
+                            self.timed_profile_error_reported = True
+                            QMessageBox.warning(
+                                self,
+                                "시간 기반 모션 전송 실패",
+                                "프레임 도착시간 또는 최종 Goal Position을 전송하지 못해 "
+                                "실기 재생을 중단합니다.",
+                            )
+                        self.is_playing = False
+                        self.anim_timer.stop()
+                        self.update_playback_buttons()
+                        return
+
+                # 모터 Goal 레지스터에는 프레임 최종각이 들어 있지만, 자세오차는
+                # 그 시각에 도달해야 하는 타임라인 보간각을 기준으로 계산합니다.
+                self.set_tracking_target_angles(target_angles_to_render)
+                now = time.perf_counter()
+                if (frame_sent or force_robot
+                        or now - self.last_timed_feedback_time >= TIMED_FEEDBACK_INTERVAL_SEC):
+                    self.last_timed_feedback_time = now
+                    self.read_feedback_and_report_fk()
+            else:
+                self.apply_to_real_robot(target_angles_to_render, force=force_robot)
         elif self.robot_sync_enabled:
             self.queue_robot_scrub_target(target_angles_to_render)
 
     def queue_robot_scrub_target(self, angles_dict):
-        """수동 타임라인 탐색 목표를 즉시 쓰지 않고 제한 속도로 추종합니다."""
+        """수동 타임라인 탐색 목표를 다음 200Hz tick에 그대로 전송합니다."""
         target = self.normalize_angles(angles_dict)
         if not target:
             return
-        if not self.robot_scrub_command_angles:
-            self.robot_scrub_command_angles = {
-                j_id: self.joints.get(j_id, angle) for j_id, angle in target.items()
-            }
         self.robot_scrub_target_angles = target
-        self.robot_scrub_last_time = time.time()
         if not self.robot_scrub_timer.isActive():
             self.robot_scrub_timer.start()
 
@@ -2873,32 +3293,29 @@ class SDKMotionEditor(QWidget):
             self.robot_scrub_timer.stop()
             return
 
-        now = time.time()
-        elapsed = max(0.001, min(0.1, now - self.robot_scrub_last_time))
-        self.robot_scrub_last_time = now
-        max_step = self.robot_scrub_speed_deg_per_sec * elapsed
-        next_angles = dict(self.robot_scrub_command_angles)
-        reached_target = True
+        # 기존 45deg/s 클램프를 제거하고 타임라인이 요청한 각도를
+        # 그대로 명령합니다. 물리적 최대 성능/토크 한계는 모터 자체가 관리합니다.
+        next_angles = dict(self.robot_scrub_target_angles)
+        target_ids = sorted(set(next_angles) & set(self.online_joints))
 
-        for j_id, target_angle in self.robot_scrub_target_angles.items():
-            current_angle = next_angles.get(j_id, self.joints.get(j_id, target_angle))
-            delta = self.shortest_angle_delta(current_angle, target_angle)
-            if abs(delta) > max_step:
-                delta = math.copysign(max_step, delta)
-                reached_target = False
-            next_angles[j_id] = current_angle + delta
+        # 직전 시퀀스의 도착시간이 남아 있으면 수동 탐색에도 그 시간이
+        # 재사용되므로, 수동 Goal은 기존과 같은 즉시(step) 명령으로 되돌립니다.
+        if (set(target_ids).issubset(self.time_based_profile_ids)
+                and not self.configure_unlimited_motor_profiles(target_ids)):
+            self.robot_scrub_timer.stop()
+            QMessageBox.warning(self, "통신 에러", "수동 탐색용 모터 프로파일 초기화에 실패했습니다.")
+            return
 
         if not self.write_goal_positions(
             next_angles,
-            target_ids=self.robot_scrub_target_angles.keys(),
+            target_ids=target_ids,
         ):
             self.robot_scrub_timer.stop()
             QMessageBox.warning(self, "통신 에러", "타임라인 자세를 로봇에 전송하지 못했습니다.")
             return
 
         self.robot_scrub_command_angles = next_angles
-        if reached_target:
-            self.robot_scrub_timer.stop()
+        self.robot_scrub_timer.stop()
 
     def normalize_angles(self, angles_dict):
         normalized = {}
@@ -2978,8 +3395,10 @@ class SDKMotionEditor(QWidget):
 
         torque_off_ids = []
         torque_read_failed_ids = []
+        torque_states = {}
         for j_id in sorted(sequence_ids):
             torque_state = self.read_torque_enabled(j_id)
+            torque_states[j_id] = torque_state
             if torque_state is False:
                 torque_off_ids.append(j_id)
             elif torque_state is None:
@@ -2990,6 +3409,39 @@ class SDKMotionEditor(QWidget):
                 self,
                 "통신 에러",
                 f"토크 상태를 확인하지 못한 모터가 있어 실제 구동을 중단합니다.\nID: {torque_read_failed_ids}",
+            )
+            return False
+
+        not_ready_ids = sorted(sequence_ids - self.time_based_profile_ids)
+        if not_ready_ids:
+            torque_on_not_ready = [
+                j_id for j_id in not_ready_ids if torque_states.get(j_id) is True
+            ]
+            if torque_on_not_ready:
+                QMessageBox.warning(
+                    self,
+                    "시간 기반 프로파일 준비 필요",
+                    "프레임 시간대로 도착하도록 설정하려면 Drive Mode EEPROM을 "
+                    "변경해야 하므로 먼저 전체 토크를 OFF해야 합니다.\n"
+                    f"설정되지 않은 토크 ON ID: {torque_on_not_ready}",
+                )
+                return False
+            if not self.configure_time_based_drive_mode(not_ready_ids):
+                QMessageBox.warning(
+                    self,
+                    "시간 기반 프로파일 설정 실패",
+                    "MX 펌웨어 V42 이상 및 토크 OFF 상태가 필요합니다.\n"
+                    f"설정 실패 ID: {not_ready_ids}",
+                )
+                return False
+
+        # 이전 재생에서 남은 프레임 도착시간을 지우고, 첫 프레임이 시작될 때
+        # 그 프레임의 실제 재생시간을 새로 기록합니다.
+        if not self.configure_unlimited_motor_profiles(sequence_ids):
+            QMessageBox.warning(
+                self,
+                "통신 에러",
+                "시간 기반 모터 프로파일을 초기화하지 못해 실제 구동을 중단합니다.",
             )
             return False
 
@@ -3015,10 +3467,173 @@ class SDKMotionEditor(QWidget):
             )
             return False
 
-        self.last_robot_write_time = 0
         return True
 
-    def write_goal_positions(self, angles_dict, target_ids=None):
+    def angles_to_urdf_radians(self, angles_dict):
+        """DYNAMIXEL ID 기준 각도(deg)를 URDF joint 기준 각도(rad)로 변환합니다."""
+        angles = self.normalize_angles(angles_dict)
+        return {
+            urdf_name: math.radians(angles[j_id])
+            for j_id, urdf_name in self.urdf_joint_map.items()
+            if j_id in angles
+        }
+
+    def calculate_fk_tracking_error(self):
+        """명령/실측 각도의 FK와 관절 추종 오차를 계산합니다."""
+        import numpy as np
+
+        # 아직 Goal을 보내지 않은 축은 실측값을 목표 자세의 기준으로
+        # 사용해, 부분 관절 명령 시 무관한 축이 FK 오차에 포함되지 않게 합니다.
+        target_angles = dict(self.feedback_angles)
+        for j_id in self.commanded_joint_ids:
+            if j_id in self.commanded_angles:
+                target_angles[j_id] = self.commanded_angles[j_id]
+
+        joint_errors = {
+            j_id: self.shortest_angle_delta(
+                self.feedback_angles[j_id],
+                self.commanded_angles[j_id],
+            )
+            for j_id in self.commanded_joint_ids
+            if j_id in self.feedback_angles and j_id in self.commanded_angles
+        }
+
+        result = {
+            "joint_errors_deg": joint_errors,
+            "joint_samples": {
+                j_id: {
+                    "goal_deg": self.commanded_angles[j_id],
+                    "actual_deg": self.feedback_angles[j_id],
+                    "error_deg": error,
+                }
+                for j_id, error in joint_errors.items()
+            },
+            "joint_rms_deg": 0.0,
+            "joint_max_deg": 0.0,
+            "joint_max_id": None,
+            "end_effectors": {},
+        }
+        if joint_errors:
+            max_joint_id = max(joint_errors, key=lambda j_id: abs(joint_errors[j_id]))
+            result["joint_rms_deg"] = math.sqrt(
+                sum(error * error for error in joint_errors.values()) / len(joint_errors)
+            )
+            result["joint_max_deg"] = abs(joint_errors[max_joint_id])
+            result["joint_max_id"] = max_joint_id
+
+        if not self.urdf_loaded or self.robot_model is None:
+            return result
+
+        target_poses = self.robot_model._compute_link_poses(
+            self.angles_to_urdf_radians(target_angles)
+        )
+        actual_poses = self.robot_model._compute_link_poses(
+            self.angles_to_urdf_radians(self.feedback_angles)
+        )
+        for link_name in self.robot_model.end_effector_links:
+            target_pose = target_poses.get(link_name)
+            actual_pose = actual_poses.get(link_name)
+            if target_pose is None or actual_pose is None:
+                continue
+
+            position_error_mm = float(
+                np.linalg.norm(target_pose[:3, 3] - actual_pose[:3, 3]) * 1000.0
+            )
+            relative_rotation = target_pose[:3, :3].T @ actual_pose[:3, :3]
+            cos_angle = float(np.clip((np.trace(relative_rotation) - 1.0) * 0.5, -1.0, 1.0))
+            orientation_error_deg = math.degrees(math.acos(cos_angle))
+            result["end_effectors"][link_name] = {
+                "position_mm": position_error_mm,
+                "orientation_deg": orientation_error_deg,
+            }
+
+        return result
+
+    def print_fk_tracking_error(self, error_data, read_elapsed_ms):
+        """고속 피드백 계산 결과를 제어를 방해하지 않는 10Hz 요약으로 출력합니다."""
+        now = time.perf_counter()
+        if (self.fk_feedback_sample_count > 1
+                and now - self.last_fk_error_log_time < FK_ERROR_LOG_INTERVAL_SEC):
+            return
+        self.last_fk_error_log_time = now
+
+        max_joint_id = error_data["joint_max_id"]
+        max_joint_text = "-" if max_joint_id is None else str(max_joint_id)
+        fk_parts = []
+        for link_name, error in error_data["end_effectors"].items():
+            fk_parts.append(
+                f"{link_name}={error['position_mm']:.2f}mm/{error['orientation_deg']:.2f}deg"
+            )
+        fk_text = " | ".join(fk_parts) if fk_parts else "FK unavailable"
+        joint_text = " ".join(
+            f"{j_id}:{sample['goal_deg']:.2f}/{sample['actual_deg']:.2f}/{sample['error_deg']:+.2f}"
+            for j_id, sample in sorted(error_data["joint_samples"].items())
+        )
+        print(f"[실기 관절 goal/actual/error deg] {joint_text}")
+        print(
+            f"[실기 Present Position FK 오차 #{self.fk_feedback_sample_count:06d}] "
+            f"joint RMS={error_data['joint_rms_deg']:.3f}deg, "
+            f"MAX={error_data['joint_max_deg']:.3f}deg(ID {max_joint_text}) | "
+            f"{fk_text} | SyncRead={read_elapsed_ms:.2f}ms"
+        )
+
+    def read_feedback_and_report_fk(self):
+        """전 관절 Present Position을 SyncRead하고 현재 타임라인 FK 오차를 계산합니다."""
+        read_ids = sorted(set(self.online_joints))
+        if not read_ids:
+            return False
+
+        started_at = time.perf_counter()
+        self.groupSyncRead.clearParam()
+        for j_id in read_ids:
+            if not self.groupSyncRead.addParam(j_id):
+                print(f"[❌ FK 피드백 준비 실패] ID {j_id}")
+                return False
+
+        dxl_comm_result = self.groupSyncRead.txRxPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            self.fk_feedback_read_failures += 1
+            now = time.perf_counter()
+            if now - self.last_fk_read_error_log_time >= 1.0:
+                self.last_fk_read_error_log_time = now
+                print(
+                    f"[❌ FK 피드백 실패 x{self.fk_feedback_read_failures}] "
+                    f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+                )
+            return False
+
+        measured_angles = {}
+        for j_id in read_ids:
+            if not self.groupSyncRead.isAvailable(
+                j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
+            ):
+                continue
+            dxl_present_position = self.groupSyncRead.getData(
+                j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION
+            )
+            measured_angles[j_id] = self.dxl_position_to_angle(dxl_present_position)
+
+        missing_ids = sorted(set(read_ids) - set(measured_angles))
+        if missing_ids:
+            self.fk_feedback_read_failures += 1
+            now = time.perf_counter()
+            if now - self.last_fk_read_error_log_time >= 1.0:
+                self.last_fk_read_error_log_time = now
+                print(
+                    f"[❌ 실기 Present Position 누락 x{self.fk_feedback_read_failures}] "
+                    f"ID {missing_ids} - FK 오차 계산 생략"
+                )
+            return False
+
+        self.fk_feedback_read_failures = 0
+        self.feedback_angles.update(measured_angles)
+        self.fk_feedback_sample_count += 1
+        error_data = self.calculate_fk_tracking_error()
+        read_elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        self.print_fk_tracking_error(error_data, read_elapsed_ms)
+        return True
+
+    def write_goal_positions(self, angles_dict, target_ids=None, read_feedback=True):
         if not self.port_opened:
             return False
 
@@ -3029,6 +3644,7 @@ class SDKMotionEditor(QWidget):
         ids = list(target_ids) if target_ids is not None else list(self.online_joints)
         self.groupSyncWrite.clearParam()
         added_count = 0
+        sent_angles = {}
         for j_id in ids:
             j_id = int(j_id)
             if j_id not in angles:
@@ -3042,6 +3658,8 @@ class SDKMotionEditor(QWidget):
             ]
             if self.groupSyncWrite.addParam(j_id, param_goal_position):
                 added_count += 1
+                # FK 목표는 모터에 실제 전송된 quantize/clamp 각도를 사용합니다.
+                sent_angles[j_id] = self.dxl_position_to_angle(dxl_goal_position)
             else:
                 print(f"[❌ SyncWrite 준비 실패] ID {j_id} 파라미터 추가 실패")
 
@@ -3053,7 +3671,98 @@ class SDKMotionEditor(QWidget):
             print(f"[❌ SyncWrite 에러] 목표 위치 전송 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             return False
 
+        self.commanded_angles.update(sent_angles)
+        self.commanded_joint_ids.update(sent_angles.keys())
+        # 시간 기반 프로파일은 프레임 목표를 먼저 한 번 전송한 뒤, 현재
+        # 타임라인 목표를 별도로 기록하고 피드백을 읽습니다.
+        if read_feedback:
+            # 피드백 읽기/FK 실패는 이미 성공한 Goal Position 전송 결과를
+            # 실패로 바꾸지 않습니다.
+            self.read_feedback_and_report_fk()
         return True
+
+    def set_tracking_target_angles(self, angles_dict):
+        """FK/관절 오차의 목표를 현재 타임라인상의 자세로 갱신합니다."""
+        for j_id, angle in self.normalize_angles(angles_dict).items():
+            dxl_position = self.angle_to_dxl_position(angle)
+            self.commanded_angles[j_id] = self.dxl_position_to_angle(dxl_position)
+            self.commanded_joint_ids.add(j_id)
+
+    def command_time_profile_frame(self, frame, t_ms):
+        """프레임 종료각을 남은 실제 시간과 함께 모터에 한 번만 전송합니다."""
+        frame_key = frame.get("frame_id") or id(frame)
+        token = (
+            self.playback_repeat_current,
+            frame_key,
+            int(frame.get("start_ms", 0)),
+            int(frame.get("time_ms", CONTROL_INTERVAL_MS)),
+        )
+        if token == self.active_timed_frame_token:
+            return True, False
+
+        frame_angles = self.normalize_angles(frame.get("angles", {}))
+        target_ids = sorted(set(frame_angles) & set(self.online_joints))
+        if not target_ids:
+            self.active_timed_frame_token = token
+            return True, False
+        if not set(target_ids).issubset(self.time_based_profile_ids):
+            print(f"[❌ 시간 프로파일 미준비] ID {sorted(set(target_ids) - self.time_based_profile_ids)}")
+            return False, False
+
+        frame_end_ms = int(frame.get("start_ms", 0)) + max(
+            CONTROL_INTERVAL_MS,
+            int(frame.get("time_ms", CONTROL_INTERVAL_MS)),
+        )
+        remaining_timeline_ms = max(1, frame_end_ms - int(t_ms))
+        real_duration_ms = max(1, int(math.ceil(remaining_timeline_ms / self.playback_speed)))
+        if not self.set_time_profile_duration(target_ids, real_duration_ms):
+            return False, False
+        if not self.write_goal_positions(
+            frame_angles,
+            target_ids=target_ids,
+            read_feedback=False,
+        ):
+            return False, False
+
+        self.active_timed_frame_token = token
+        required_speeds = {
+            j_id: abs(self.shortest_angle_delta(
+                self.feedback_angles.get(j_id, frame_angles[j_id]),
+                frame_angles[j_id],
+            )) * 1000.0 / real_duration_ms
+            for j_id in target_ids
+        }
+        max_speed_id = max(required_speeds, key=required_speeds.get)
+        print(
+            f"[⏱️ 시간지정 프레임] '{frame.get('name', 'Frame')}' "
+            f"timeline_remaining={remaining_timeline_ms}ms, "
+            f"motor_arrival={real_duration_ms}ms, speed={self.playback_speed:.1f}x, "
+            f"required_max={required_speeds[max_speed_id]:.1f}deg/s(ID {max_speed_id})"
+        )
+        return True, True
+
+    def hold_timed_motion_at_feedback(self):
+        """일시정지/사용자 중지 시 예약된 최종 목표로 계속 가지 않게 즉시 고정합니다."""
+        if not self.execute_on_real_robot or self.active_timed_frame_token is None:
+            return
+        target_ids = sorted(self.sequence_joint_ids() & set(self.online_joints))
+        if not target_ids or not set(target_ids).issubset(self.time_based_profile_ids):
+            return
+
+        self.read_feedback_and_report_fk()
+        hold_angles = {
+            j_id: self.feedback_angles[j_id]
+            for j_id in target_ids
+            if j_id in self.feedback_angles
+        }
+        if not hold_angles:
+            return
+        if self.set_time_profile_duration(hold_angles.keys(), 1):
+            self.write_goal_positions(
+                hold_angles,
+                target_ids=hold_angles.keys(),
+                read_feedback=False,
+            )
 
     def read_present_angle(self, j_id):
         if not hasattr(self, 'port_opened') or not self.port_opened:
@@ -3170,12 +3879,15 @@ class SDKMotionEditor(QWidget):
                     btn.blockSignals(False)
                     btn.setText("OFF")
                     btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
-                    self.sliders[j_id].setEnabled(False)
-                    self.spinboxes[j_id].setEnabled(False)
+                    self.sliders[j_id].setEnabled(j_id in self.online_joints)
+                    self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
                     QMessageBox.warning(self, "통신 에러", f"ID {j_id} 모터의 현재 각도를 읽지 못해 토크 ON을 중단했습니다.")
                     return
 
                 self.update_joint_display(j_id, angle_deg)
+                self.feedback_angles[j_id] = angle_deg
+                self.commanded_angles[j_id] = angle_deg
+                self.commanded_joint_ids.add(j_id)
 
                 # 목표 주소(Goal Position)에 튐 방지용 현재 위치를 선등록
                 dxl_goal_position = self.angle_to_dxl_position(angle_deg)
@@ -3187,14 +3899,30 @@ class SDKMotionEditor(QWidget):
                     btn.blockSignals(False)
                     btn.setText("OFF")
                     btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
-                    self.sliders[j_id].setEnabled(False)
-                    self.spinboxes[j_id].setEnabled(False)
+                    self.sliders[j_id].setEnabled(j_id in self.online_joints)
+                    self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
                     QMessageBox.warning(self, "통신 에러", f"ID {j_id} 모터의 Goal Position 선등록에 실패해 토크 ON을 중단했습니다.")
                     return
 
                 # Goal Position 쓰기 응답이 다음 Torque 쓰기와 섞이지 않게 비웁니다.
                 time.sleep(0.005)
                 self.portHandler.clearPort()
+
+                if not self.configure_unlimited_motor_profiles([j_id]):
+                    btn.blockSignals(True)
+                    btn.setChecked(False)
+                    btn.blockSignals(False)
+                    btn.setText("OFF")
+                    btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
+                    self.sliders[j_id].setEnabled(j_id in self.online_joints)
+                    self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
+                    QMessageBox.warning(
+                        self,
+                        "통신 에러",
+                        f"ID {j_id} 모터의 속도/가속도 프로파일 설정에 실패해 "
+                        "토크 ON을 중단했습니다.",
+                    )
+                    return
 
                 print(f"   [🔄 동기화 완료] 개별 토크 ON 전 실제 각도 {angle_deg}도 획득 및 Goal 선매핑")
 
@@ -3218,17 +3946,20 @@ class SDKMotionEditor(QWidget):
 
         btn.setText("ON" if is_on else "OFF")
         btn.setStyleSheet("background-color: #28a745; color: white; font-weight: bold; border-radius: 4px;" if is_on else "background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
-        self.sliders[j_id].setEnabled(is_on)
-        self.spinboxes[j_id].setEnabled(is_on)
+        self.sliders[j_id].setEnabled(j_id in self.online_joints)
+        self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
         self.update_torque_group_buttons()
 
-    # 🚀 [원인 분석 및 해결] 드래그 시 대량 패킷 충돌 방지를 위해 TxOnly 사용!
+    # 수동 Goal Position도 공통 SyncWrite -> 실기 SyncRead -> FK 경로를 사용합니다.
     def sync_values(self, joint_id, value, source, transmit_motor=True):
         if transmit_motor and self.frame_apply_timer.isActive():
             self.frame_apply_timer.stop()
             self.frame_apply_ids = []
             self.frame_apply_on_complete = None
 
+        # 사용자가 숫자/슬라이더를 직접 조작한 값은 프레임 편집 목표이므로
+        # 실기 라이브 피드백이 다시 덮어쓰지 않게 유지합니다.
+        self.editing_loaded_pose = True
         self.joints[joint_id] = value
         if source == 'slider':
             self.spinboxes[joint_id].blockSignals(True)
@@ -3242,15 +3973,16 @@ class SDKMotionEditor(QWidget):
         
         if (transmit_motor and self.torque_btns[joint_id].isChecked()
                 and hasattr(self, 'port_opened') and self.port_opened):
-            dxl_goal_position = self.angle_to_dxl_position(value)
-            
-            # TxRx 대신 TxOnly 적용
-            dxl_comm_result = self.packetHandler.write4ByteTxOnly(self.portHandler, joint_id, ADDR_GOAL_POSITION, dxl_goal_position)
-            
-            if dxl_comm_result != COMM_SUCCESS:
-                print(f"[❌ TX 에러] ID {joint_id} 각도 전송 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
+            # 직전 시퀀스의 time-based 도착시간이 남아 있으면 수동 입력에도
+            # 적용되므로, Enter 수동 명령은 step 프로파일로 초기화합니다.
+            if (joint_id in self.time_based_profile_ids
+                    and not self.configure_unlimited_motor_profiles([joint_id])):
+                print(f"[❌ TX 에러] ID {joint_id} 수동 입력 프로파일 초기화 실패")
+                return
+            if not self.write_goal_positions({joint_id: value}, target_ids=[joint_id]):
+                print(f"[❌ TX 에러] ID {joint_id} 각도 전송 실패")
             else:
-                print(f"[✅ 통신 성공] ID {joint_id} -> {value}도 명령 쏨 (응답 무시)")
+                print(f"[✅ 통신 성공] ID {joint_id} -> {value}도 명령 후 실기 Present Position 읽기")
 
     def read_angles_from_robot(self):
         print("👉 [GUI 작동 감지] 실제 로봇 관절값 읽어오기 버튼 눌림!")
@@ -3277,6 +4009,7 @@ class SDKMotionEditor(QWidget):
             return
             
         success_ids = []
+        self.editing_loaded_pose = False
         for j_id in self.online_joints:
             if self.groupSyncRead.isAvailable(j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION):
                 dxl_present_position = self.groupSyncRead.getData(j_id, ADDR_PRESENT_POSITION, LEN_PRESENT_POSITION)
@@ -3290,11 +4023,9 @@ class SDKMotionEditor(QWidget):
 
     def apply_to_real_robot(self, angles_dict, force=False):
         if not self.execute_on_real_robot or not self.port_opened: return
-        now = time.time()
-        if not force and (now - self.last_robot_write_time) < 0.03:
-            return
-        if self.write_goal_positions(angles_dict):
-            self.last_robot_write_time = now
+        # 호출자인 PreciseTimer가 5ms(200Hz) 주기를 관리합니다.
+        # 기존 30ms 소프트웨어 쓰기 제한은 제거했습니다.
+        self.write_goal_positions(angles_dict)
 
     # 🚀 [제로-저크 안전 결합 해결] 전체 토크를 켤 때, 먼저 23축 전체 물리 각도를 SyncRead로 긁어와 목표 각도(Goal Position)를 강제 일치시킵니다.
     def set_all_torque_on(self):
@@ -3340,9 +4071,40 @@ class SDKMotionEditor(QWidget):
             QMessageBox.warning(self, "통신 에러", "토크 ON 전 현재 각도를 읽어오지 못해 전체 토크 ON을 중단했습니다.")
             return
 
+        actual_start_angles = {j_id: self.joints[j_id] for j_id in read_success_ids}
+        self.feedback_angles.update(actual_start_angles)
+        self.commanded_angles.update(actual_start_angles)
+        self.commanded_joint_ids.update(read_success_ids)
         self.update_3d_robot()
 
-        # 2. 동기화된 각도 데이터를 모든 Goal Position 레지스터에 선등록하여 잠금 시 snap(발작) 발생을 원천 차단
+        # 2. 새로 연결된 모터도 토크를 켜기 전에 시간 기반 Drive Mode를 준비합니다.
+        not_ready_ids = sorted(set(read_success_ids) - self.time_based_profile_ids)
+        if not_ready_ids:
+            torque_on_ids = [
+                j_id for j_id in not_ready_ids
+                if self.read_torque_enabled(j_id) is True
+            ]
+            if torque_on_ids or not self.configure_time_based_drive_mode(not_ready_ids):
+                QMessageBox.warning(
+                    self,
+                    "시간 기반 프로파일 설정 실패",
+                    "Drive Mode 설정은 토크 OFF 상태에서만 가능합니다.\n"
+                    f"확인할 ID: {torque_on_ids or not_ready_ids}",
+                )
+                return
+
+        # 3. 잠금 전 Profile 값을 0으로 초기화합니다. 시간 기반 모드에서 0은
+        # 선등록 Goal을 현재각에 즉시 맞추는 step 설정이며 실제 이동 프레임은
+        # 재생 시 해당 time_ms로 다시 설정됩니다.
+        if not self.configure_unlimited_motor_profiles(read_success_ids):
+            QMessageBox.warning(
+                self,
+                "통신 에러",
+                "모터 속도/가속도 프로파일 설정에 실패해 전체 토크 ON을 중단했습니다.",
+            )
+            return
+
+        # 4. 동기화된 각도 데이터를 모든 Goal Position 레지스터에 선등록하여 잠금 시 snap(발작) 발생을 원천 차단
         self.groupSyncWrite.clearParam()
         for j_id in self.online_joints:
             if j_id not in read_success_ids:
@@ -3361,7 +4123,7 @@ class SDKMotionEditor(QWidget):
             QMessageBox.warning(self, "통신 에러", f"Goal Position 선등록 실패로 전체 토크 ON을 중단했습니다.\n{self.packetHandler.getTxRxResult(dxl_goal_result)}")
             return
 
-        # 3. 그 다음 전 관절 잠금 (Torque ON)
+        # 5. 그 다음 전 관절 잠금 (Torque ON)
         self.groupSyncWriteTorque.clearParam()
         for j_id, btn in self.torque_btns.items():
             btn.blockSignals(True)
@@ -3393,8 +4155,8 @@ class SDKMotionEditor(QWidget):
                     btn.setChecked(False)
                     btn.setText("OFF")
                     btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;")
-                    self.sliders[j_id].setEnabled(False)
-                    self.spinboxes[j_id].setEnabled(False)
+                    self.sliders[j_id].setEnabled(j_id in self.online_joints)
+                    self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
                     btn.blockSignals(False)
                 QMessageBox.warning(self, "통신 에러", f"전체 토크 ON 명령 전송에 실패했습니다.\n{self.packetHandler.getTxRxResult(dxl_comm_result)}")
             else:
@@ -3412,8 +4174,8 @@ class SDKMotionEditor(QWidget):
             btn.setChecked(False)
             btn.setText("OFF")
             btn.setStyleSheet("background-color: #dc3545; color: white; font-weight: bold; border-radius: 4px;" if j_id in self.online_joints else "background-color: #6c757d; color: white; font-weight: bold; border-radius: 4px;")
-            self.sliders[j_id].setEnabled(False)
-            self.spinboxes[j_id].setEnabled(False)
+            self.sliders[j_id].setEnabled(j_id in self.online_joints)
+            self.spinboxes[j_id].setEnabled(j_id in self.online_joints)
             btn.blockSignals(False)
             
             if j_id in self.online_joints:
@@ -3425,6 +4187,11 @@ class SDKMotionEditor(QWidget):
                 print(f"[❌ 에러] 전체 토크 OFF 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             else:
                 print(f"[✅ 발송 완료] 감지된 {len(self.online_joints)}개 모터에 티칭(늘어짐) 명령 쐈습니다!")
+                if not self.configure_time_based_drive_mode(self.online_joints):
+                    print(
+                        "[⚠️ 시간 기반 프로파일 준비 실패] "
+                        "실기 시퀀스 재생 전에 모터 펌웨어와 Drive Mode를 확인하세요."
+                    )
 
         self.update_torque_group_buttons()
 
@@ -3451,7 +4218,19 @@ class SDKMotionEditor(QWidget):
             if j_id in self.torque_btns: self.torque_btns[j_id].setChecked(is_on)
         self.update_3d_robot()
         if self.port_opened and any(btn.isChecked() for btn in self.torque_btns.values()):
-            self.write_goal_positions(angles)
+            active_ids = sorted(set(angles) & set(self.online_joints))
+            if not active_ids:
+                return QMessageBox.warning(self, "통신 에러", "프레임에 연결된 온라인 모터가 없습니다.")
+            duration_ms = max(CONTROL_INTERVAL_MS, int(frame.get("time_ms", 500)))
+            if not set(active_ids).issubset(self.time_based_profile_ids):
+                return QMessageBox.warning(
+                    self,
+                    "시간 기반 프로파일 준비 필요",
+                    "먼저 전체 토크 OFF를 눌러 모터의 시간 기반 Drive Mode를 준비하세요.",
+                )
+            if not self.set_time_profile_duration(active_ids, duration_ms):
+                return QMessageBox.warning(self, "통신 에러", "프레임 도착시간 설정에 실패했습니다.")
+            self.write_goal_positions(angles, target_ids=active_ids)
         QMessageBox.information(self, "실행 완료", f"로봇이 '{frame['name']}' 자세로 이동합니다!")
 
     def apply_selected_frame(self):
@@ -3469,9 +4248,9 @@ class SDKMotionEditor(QWidget):
         if self.is_playing:
             self.stop_motion_sequence()
 
-        # 저장 시간이 짧아도 실제 로봇은 최소 1초 동안 이동시켜 급격한
-        # 자세 변화를 방지합니다. 더 느리게 하려면 프레임 이동 시간을 늘립니다.
-        duration_ms = max(1000, int(frame.get("time_ms", 500)))
+        # 저장된 프레임 시간을 그대로 사용합니다. 기존의 최소 1초
+        # 제한은 짧은 키프레임을 임의로 느리게 만들어 제거했습니다.
+        duration_ms = max(CONTROL_INTERVAL_MS, int(frame.get("time_ms", 500)))
         self.time_spinbox.setValue(int(frame.get("time_ms", 500)))
 
         # 저장 당시 토크 상태를 강제로 복원하지 않고, 현재 사용자가 켜 둔
@@ -3495,11 +4274,18 @@ class SDKMotionEditor(QWidget):
                 start_angles[j_id] = current_angle
                 self.update_joint_display(j_id, current_angle, update_robot=False)
 
+            # 이 경로는 200Hz 중간각 보간을 사용하므로 직전 시퀀스의
+            # time-based 도착시간이 각 중간 Goal마다 다시 시작되지 않게 0으로 초기화합니다.
+            if (set(active_ids).issubset(self.time_based_profile_ids)
+                    and not self.configure_unlimited_motor_profiles(active_ids)):
+                QMessageBox.warning(self, "통신 에러", "프레임 보간용 프로파일 초기화에 실패했습니다.")
+                return
+
             self.frame_apply_start_angles = start_angles
             self.frame_apply_target_angles = {j_id: angles[j_id] for j_id in active_ids}
             self.frame_apply_ids = active_ids
             self.frame_apply_duration = duration_ms / 1000.0
-            self.frame_apply_start_time = time.time()
+            self.frame_apply_start_time = time.perf_counter()
             self.frame_apply_name = frame["name"]
             self.update_3d_robot()
             self.frame_apply_timer.start()
@@ -3515,14 +4301,13 @@ class SDKMotionEditor(QWidget):
             self.frame_apply_timer.stop()
             return
 
-        progress = min(1.0, (time.time() - self.frame_apply_start_time) / self.frame_apply_duration)
-        # 시작과 끝에서 속도가 서서히 변하는 smoothstep 보간으로 충격을 줄입니다.
-        eased = progress * progress * (3.0 - 2.0 * progress)
+        progress = min(1.0, (time.perf_counter() - self.frame_apply_start_time) / self.frame_apply_duration)
+        # 임의 smoothstep 가감속을 제거하고 저장된 시간 안에서 선형 보간합니다.
         intermediate = {
             j_id: self.interpolate_angle_shortest(
                 self.frame_apply_start_angles[j_id],
                 self.frame_apply_target_angles[j_id],
-                eased,
+                progress,
             )
             for j_id in self.frame_apply_ids
         }
@@ -3555,8 +4340,14 @@ class SDKMotionEditor(QWidget):
     def load_frame_to_ui(self, row):
         if row < 0 or row >= len(self.frames): return
         frame = self.frames[row]
+        self.editing_loaded_pose = True
         self.time_spinbox.setValue(int(frame.get("time_ms", 500)))
         for j_id, angle in self.normalize_angles(frame["angles"]).items():
+            # 저장 자세 편집은 하드웨어 연결/토크 여부와 무관하게 가능합니다.
+            if j_id in self.sliders:
+                self.sliders[j_id].setEnabled(True)
+            if j_id in self.spinboxes:
+                self.spinboxes[j_id].setEnabled(True)
             self.update_joint_display(j_id, angle, update_robot=False)
         self.update_3d_robot()
 
@@ -3581,42 +4372,73 @@ class SDKMotionEditor(QWidget):
         source_frame["time_ms"] = self.time_spinbox.value()
 
         updated_sequence_frames = 0
-        collections = [self.motion_sequence]
-        collections.extend(seq.get("frames", []) for seq in self.saved_sequences)
-        for frames in collections:
+        duration_update_failures = 0
+        collections = [(self.motion_sequence, None)]
+        collections.extend(
+            (sequence.get("frames", []), sequence)
+            for sequence in self.saved_sequences
+        )
+        for frames, saved_sequence in collections:
+            linked_frames = []
             for sequence_frame in frames:
                 same_source = sequence_frame.get("frame_id") == source_frame["frame_id"]
                 legacy_name_match = (
                     not sequence_frame.get("frame_id")
                     and sequence_frame.get("name") == source_frame.get("name")
                 )
-                if not (same_source or legacy_name_match):
-                    continue
+                if same_source or legacy_name_match:
+                    linked_frames.append(sequence_frame)
+
+            # 같은 원본 프레임이 한 시퀀스에 여러 번 있어도 앞쪽부터 각각의
+            # 길이 변화량을 누적하여 뒤 프레임들을 순서대로 이동합니다.
+            for sequence_frame in sorted(
+                linked_frames,
+                key=lambda frame: frame['start_ms'],
+            ):
+                old_duration_ms = int(sequence_frame['time_ms'])
+                duration_changed, _, _ = self.shift_following_frames_for_duration(
+                    frames,
+                    sequence_frame,
+                    source_frame["time_ms"],
+                    old_duration_ms=old_duration_ms,
+                )
                 sequence_frame["frame_id"] = source_frame["frame_id"]
                 sequence_frame["name"] = source_frame["name"]
                 sequence_frame["angles"] = copy.deepcopy(source_frame["angles"])
                 sequence_frame["torques"] = copy.deepcopy(source_frame["torques"])
-                sequence_frame["time_ms"] = source_frame["time_ms"]
                 updated_sequence_frames += 1
+                if not duration_changed:
+                    sequence_frame["time_ms"] = old_duration_ms
+                    duration_update_failures += 1
 
-        total_duration = sum(frame['time_ms'] for frame in self.motion_sequence)
-        if total_duration > self.max_seq_ms:
-            self.max_seq_ms = total_duration
-            self.spin_max_time.setValue(self.max_seq_ms)
-        for sequence in self.saved_sequences:
-            sequence_duration = sum(frame['time_ms'] for frame in sequence.get('frames', []))
-            if sequence_duration > sequence.get('max_seq_ms', 0):
-                sequence['max_seq_ms'] = sequence_duration
+            if frames:
+                sequence_end_ms = max(
+                    frame['start_ms'] + frame['time_ms']
+                    for frame in frames
+                )
+                if saved_sequence is None and sequence_end_ms > self.max_seq_ms:
+                    self.max_seq_ms = sequence_end_ms
+                    self.spin_max_time.setValue(sequence_end_ms)
+                elif (
+                    saved_sequence is not None
+                    and sequence_end_ms > saved_sequence.get('max_seq_ms', 0)
+                ):
+                    saved_sequence['max_seq_ms'] = sequence_end_ms
         self.resort_motion_sequence()
         self.refresh_timeline_ui()
         widget = self.frame_list_ui1.itemWidget(self.frame_list_ui1.item(row))
         if widget: widget.label.setText(f"[{self.frames[row]['name']}] {self.frames[row]['time_ms']}ms")
         self.refresh_library_lists()
-        QMessageBox.information(
-            self,
-            "재저장",
-            f"프레임이 재저장되었고 시퀀스 블록 {updated_sequence_frames}개에 바로 반영되었습니다.",
+        message = (
+            f"프레임이 재저장되었고 시퀀스 블록 "
+            f"{updated_sequence_frames}개에 바로 반영되었습니다."
         )
+        if duration_update_failures:
+            message += (
+                f"\n단, {duration_update_failures}개 블록은 뒤 프레임 이동 시 "
+                "60000ms를 초과하여 기존 시간을 유지했습니다."
+            )
+        QMessageBox.information(self, "재저장", message)
 
     def rename_frame(self):
         row = self.frame_list_ui1.currentRow()
@@ -3629,7 +4451,8 @@ class SDKMotionEditor(QWidget):
             self.refresh_library_lists()
 
     def mirror_frame(self):
-        mirrored = {0: self.joints[0]*-1, 1: self.joints[1]*1, 11: self.joints[11]*-1}
+        # 먼저 전 관절을 복사해 지정되지 않은 모터 값은 완전히 보존합니다.
+        mirrored = dict(self.joints)
         for r_id, (l_id, sign) in self.mirror_map.items():
             mirrored[l_id], mirrored[r_id] = self.joints[r_id] * sign, self.joints[l_id] * sign
         for j_id, angle in mirrored.items():
