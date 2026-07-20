@@ -25,9 +25,9 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QSlider, QLabel, QPushButton, QListWidget, QFileDialog, 
                              QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QFrame, QInputDialog,
                              QTabWidget, QMessageBox, QGridLayout, QCheckBox, QListWidgetItem, QAbstractItemView,
-                             QOpenGLWidget)
+                             QOpenGLWidget, QShortcut)
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPainter, QColor, QPen, QMatrix4x4
+from PyQt5.QtGui import QPainter, QColor, QPen, QMatrix4x4, QKeySequence
 
 # 🔥 다이나믹셀 SDK 라이브러리 임포트
 from dynamixel_sdk import *
@@ -1067,6 +1067,10 @@ class SDKMotionEditor(QWidget):
         self.is_select_mode = False 
         self.autosave_enabled = False
         self.state_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), STATE_FILENAME)
+        self.state_backup_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), ".sdk_gui_backups"
+        )
+        self.undo_state_history = []
         
         self.anim_timer = QTimer(self)
         self.anim_timer.setTimerType(Qt.PreciseTimer)
@@ -1653,17 +1657,200 @@ class SDKMotionEditor(QWidget):
         if not getattr(self, 'autosave_enabled', False):
             return
         try:
-            state = {
-                "version": 1,
-                "frames": self.frames,
-                "saved_sequences": self.saved_sequences,
-                "motion_sequence": self.motion_sequence,
-                "max_seq_ms": self.max_seq_ms,
-            }
+            state = self.current_persistent_state_data()
+            previous_state = None
+            if os.path.exists(self.state_file_path):
+                try:
+                    with open(self.state_file_path, 'r', encoding='utf-8') as previous_file:
+                        previous_state = json.load(previous_file)
+                except (OSError, ValueError, TypeError):
+                    previous_state = None
+
+            # 내용이 실제로 바뀔 때만 이전 상태를 메모리와 디스크에 남깁니다.
+            # 같은 UI 갱신에서 save가 여러 번 호출돼도 중복 백업되지 않습니다.
+            if previous_state is not None and previous_state != state:
+                self.undo_state_history.append(copy.deepcopy(previous_state))
+                self.undo_state_history = self.undo_state_history[-50:]
+                os.makedirs(self.state_backup_dir, exist_ok=True)
+                backup_path = os.path.join(
+                    self.state_backup_dir,
+                    f"state_{time.time_ns()}.json",
+                )
+                with open(backup_path, 'w', encoding='utf-8') as backup_file:
+                    json.dump(previous_state, backup_file, indent=2, ensure_ascii=False)
+                backup_files = sorted(
+                    name for name in os.listdir(self.state_backup_dir)
+                    if name.startswith("state_") and name.endswith(".json")
+                )
+                for old_name in backup_files[:-50]:
+                    try:
+                        os.remove(os.path.join(self.state_backup_dir, old_name))
+                    except OSError:
+                        pass
             with open(self.state_file_path, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"[⚠️ 자동 저장 실패] {type(e).__name__}: {e}")
+
+    def current_persistent_state_data(self):
+        return {
+            "version": 1,
+            "frames": copy.deepcopy(self.frames),
+            "saved_sequences": copy.deepcopy(self.saved_sequences),
+            "motion_sequence": copy.deepcopy(self.motion_sequence),
+            "max_seq_ms": self.max_seq_ms,
+        }
+
+    @staticmethod
+    def describe_state_restore(current_state, restored_state, limit=20):
+        """사용자가 알아볼 수 있게 복구 전후 차이를 요약합니다."""
+        changes = []
+        current_frames = current_state.get("frames", [])
+        restored_frames = restored_state.get("frames", [])
+
+        def frame_key(frame):
+            return frame.get("frame_id") or ("name", frame.get("name"))
+
+        current_by_key = {frame_key(frame): frame for frame in current_frames}
+        restored_by_key = {frame_key(frame): frame for frame in restored_frames}
+        for key in current_by_key.keys() - restored_by_key.keys():
+            changes.append(f"프레임 제거 복구: '{current_by_key[key].get('name', 'Frame')}'이(가) 없어짐")
+        for key in restored_by_key.keys() - current_by_key.keys():
+            changes.append(f"프레임 삭제 취소: '{restored_by_key[key].get('name', 'Frame')}' 복원")
+        for key in current_by_key.keys() & restored_by_key.keys():
+            before = current_by_key[key]
+            after = restored_by_key[key]
+            frame_name = after.get("name", before.get("name", "Frame"))
+            before_angles = {int(j): float(v) for j, v in before.get("angles", {}).items()}
+            after_angles = {int(j): float(v) for j, v in after.get("angles", {}).items()}
+            for joint_id in sorted(before_angles.keys() | after_angles.keys()):
+                old_angle = before_angles.get(joint_id)
+                new_angle = after_angles.get(joint_id)
+                if old_angle is None or new_angle is None or abs(old_angle - new_angle) > 1e-9:
+                    old_text = "없음" if old_angle is None else f"{old_angle:.2f}°"
+                    new_text = "없음" if new_angle is None else f"{new_angle:.2f}°"
+                    changes.append(
+                        f"[{frame_name}] 모터 {joint_id}: {old_text} → {new_text}"
+                    )
+            old_time = int(before.get("time_ms", 0))
+            new_time = int(after.get("time_ms", 0))
+            if old_time != new_time:
+                changes.append(f"[{frame_name}] 시간: {old_time}ms → {new_time}ms")
+
+        current_sequences = {
+            str(sequence.get("name", "")) for sequence in current_state.get("saved_sequences", [])
+        }
+        restored_sequences = {
+            str(sequence.get("name", "")) for sequence in restored_state.get("saved_sequences", [])
+        }
+        for name in sorted(restored_sequences - current_sequences):
+            changes.append(f"시퀀스 삭제 취소: '{name}' 복원")
+        for name in sorted(current_sequences - restored_sequences):
+            changes.append(f"시퀀스 추가 취소: '{name}' 제거")
+
+        if current_state.get("motion_sequence") != restored_state.get("motion_sequence"):
+            changes.append("현재 타임라인 구성이 이전 상태로 복구됨")
+        if current_state.get("max_seq_ms") != restored_state.get("max_seq_ms"):
+            changes.append(
+                f"타임라인 길이: {current_state.get('max_seq_ms')}ms → "
+                f"{restored_state.get('max_seq_ms')}ms"
+            )
+        if not changes:
+            changes.append("저장 상태의 내부 데이터가 이전 값으로 복구됨")
+        omitted = max(0, len(changes) - limit)
+        visible = changes[:limit]
+        if omitted:
+            visible.append(f"그 외 {omitted}개 변경")
+        return "\n".join(visible)
+
+    def apply_persistent_state_data(self, state):
+        """백업 JSON의 프레임/시퀀스/타임라인을 현재 GUI에 적용합니다."""
+        self.frames = [self.normalize_frame_data(frame) for frame in state.get("frames", [])]
+        for frame in self.frames:
+            frame.setdefault("frame_id", uuid.uuid4().hex)
+        self.saved_sequences = []
+        for seq in state.get("saved_sequences", []):
+            sequence = {
+                "name": str(seq.get("name", "Sequence")),
+                "max_seq_ms": int(seq.get("max_seq_ms", 5000)),
+                "repeat_count": max(1, int(seq.get("repeat_count", 1))),
+                "playback_speed": max(0.1, min(5.0, float(seq.get("playback_speed", 1.0)))),
+                "frames": [self.normalize_frame_data(frame) for frame in seq.get("frames", [])],
+            }
+            self.repair_legacy_sequence_timing(sequence["frames"])
+            self.saved_sequences.append(sequence)
+        self.motion_sequence = [
+            self.normalize_frame_data(frame) for frame in state.get("motion_sequence", [])
+        ]
+        self.repair_legacy_sequence_timing(self.motion_sequence)
+        self.link_sequence_frames_to_library()
+        self.max_seq_ms = int(state.get("max_seq_ms", self.max_seq_ms))
+        if hasattr(self, "spin_max_time"):
+            self.spin_max_time.setValue(self.max_seq_ms)
+        self.rebuild_frame_list_ui()
+        self.refresh_sequence_list()
+        self.refresh_timeline_ui()
+
+    def undo_last_gui_change(self):
+        """직전 자동 저장 상태를 복구합니다. 재시작 후에도 디스크 백업을 사용합니다."""
+        if self.is_playing:
+            self.stop_motion_sequence()
+        backup_files = []
+        if os.path.isdir(self.state_backup_dir):
+            backup_files = sorted(
+                name for name in os.listdir(self.state_backup_dir)
+                if name.startswith("state_") and name.endswith(".json")
+            )
+        state = self.undo_state_history.pop() if self.undo_state_history else None
+        if state is not None and backup_files:
+            try:
+                os.remove(os.path.join(self.state_backup_dir, backup_files[-1]))
+                backup_files.pop()
+            except OSError:
+                pass
+        if state is None:
+            if backup_files:
+                backup_path = os.path.join(self.state_backup_dir, backup_files[-1])
+                try:
+                    with open(backup_path, 'r', encoding='utf-8') as backup_file:
+                        state = json.load(backup_file)
+                    os.remove(backup_path)
+                except (OSError, ValueError, TypeError) as exc:
+                    return QMessageBox.warning(self, "복구 실패", str(exc))
+        if state is None:
+            return QMessageBox.information(self, "복구", "복구할 이전 변경이 없습니다.")
+
+        current_state = self.current_persistent_state_data()
+        selected_frame_id = None
+        selected_row = self.frame_list_ui1.currentRow() if hasattr(self, "frame_list_ui1") else -1
+        if 0 <= selected_row < len(self.frames):
+            selected_frame_id = self.frames[selected_row].get("frame_id")
+        change_summary = self.describe_state_restore(current_state, state)
+
+        was_autosave_enabled = self.autosave_enabled
+        self.autosave_enabled = False
+        try:
+            self.apply_persistent_state_data(state)
+            if selected_frame_id is not None:
+                restored_row = next(
+                    (
+                        index for index, frame in enumerate(self.frames)
+                        if frame.get("frame_id") == selected_frame_id
+                    ),
+                    -1,
+                )
+                if restored_row >= 0:
+                    self.frame_list_ui1.setCurrentRow(restored_row)
+                    self.load_frame_to_ui(restored_row)
+            with open(self.state_file_path, 'w', encoding='utf-8') as state_file:
+                json.dump(state, state_file, indent=2, ensure_ascii=False)
+        finally:
+            self.autosave_enabled = was_autosave_enabled
+        QMessageBox.information(
+            self,
+            "복구 완료",
+            "직전 GUI 상태로 되돌렸습니다.\n\n변경 내용:\n" + change_summary,
+        )
 
     def load_persistent_state(self):
         if not os.path.exists(self.state_file_path):
@@ -1757,6 +1944,17 @@ class SDKMotionEditor(QWidget):
         self.lbl_conn_status.setAlignment(Qt.AlignCenter)
         self.lbl_conn_status.setStyleSheet("font-weight: bold; font-size: 14pt; background-color: #333; color: #FFC107; padding: 8px; border-radius: 5px; margin-bottom: 5px;")
         main_layout.addWidget(self.lbl_conn_status)
+        recovery_layout = QHBoxLayout()
+        recovery_layout.addStretch(1)
+        self.btn_undo_state = QPushButton("↩ 직전 변경 복구 (Ctrl+Z)")
+        self.btn_undo_state.setStyleSheet(
+            "background-color: #455a64; color: white; font-weight: bold; min-height: 34px;"
+        )
+        self.btn_undo_state.clicked.connect(self.undo_last_gui_change)
+        recovery_layout.addWidget(self.btn_undo_state)
+        main_layout.addLayout(recovery_layout)
+        self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
+        self.undo_shortcut.activated.connect(self.undo_last_gui_change)
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("QTabBar::tab { min-height: 50px; min-width: 420px; font-size: 14pt; font-weight: bold; padding: 10px; }")
         self.tab_frame = QWidget()
@@ -4498,7 +4696,7 @@ class SDKMotionEditor(QWidget):
             self,
             "시퀀스 삭제",
             f"저장된 시퀀스 '{sequence_name}'을(를) 삭제하시겠습니까?\n"
-            "이 작업은 되돌릴 수 없습니다.",
+            "실수로 삭제한 경우 Ctrl+Z로 복구할 수 있습니다.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
