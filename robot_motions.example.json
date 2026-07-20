@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "motions": [
+    {
+      "name": "walk",
+      "max_seq_ms": 1500,
+      "repeat_count": 2,
+      "playback_speed": 1.0,
+      "frames": [
+        {
+          "name": "right_leg_up",
+          "start_ms": 0,
+          "time_ms": 500,
+          "angles": {"13": -20.0, "17": 40.0, "19": -20.0},
+          "torques": {"13": true, "17": true, "19": true}
+        },
+        {
+          "name": "right_leg_down",
+          "start_ms": 500,
+          "time_ms": 500,
+          "angles": {"13": 0.0, "17": 0.0, "19": 0.0},
+          "torques": {"13": true, "17": true, "19": true}
+        }
+      ]
+    }
+  ]
+}
