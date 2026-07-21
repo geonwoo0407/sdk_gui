@@ -2860,6 +2860,7 @@
   ],
   "saved_sequences": [
     {
+      "sequence_id": "720bdc666c15424b90b4c01922ff47d8",
       "name": "기본",
       "max_seq_ms": 5000,
       "repeat_count": 1,
@@ -2925,6 +2926,7 @@
       ]
     },
     {
+      "sequence_id": "7ba95977a566418691106e58cf20c28f",
       "name": "첫발",
       "max_seq_ms": 5000,
       "repeat_count": 1,
@@ -3104,6 +3106,7 @@
       ]
     },
     {
+      "sequence_id": "8bd36ecd31af44b48d4dd7ea78c08edf",
       "name": "전진",
       "max_seq_ms": 5000,
       "repeat_count": 1,
@@ -3397,6 +3400,7 @@
       ]
     },
     {
+      "sequence_id": "c37a53427aa140bd96692e3230d69d77",
       "name": "전신 최신1",
       "max_seq_ms": 5000,
       "repeat_count": 5,
@@ -3633,6 +3637,7 @@
       ]
     },
     {
+      "sequence_id": "067efffa22374298ab7c412d4774fb06",
       "name": "전진 최신2",
       "max_seq_ms": 5000,
       "repeat_count": 3,
@@ -3869,6 +3874,7 @@
       ]
     },
     {
+      "sequence_id": "575b6de075d4483e85e17d989714bc37",
       "name": "전진 가장 좋음",
       "max_seq_ms": 5000,
       "repeat_count": 10,
@@ -4105,6 +4111,7 @@
       ]
     },
     {
+      "sequence_id": "a46ba0d541754c4d8985dab6f4123099",
       "name": "공잡기",
       "max_seq_ms": 8000,
       "repeat_count": 1,
@@ -4456,6 +4463,7 @@
       ]
     },
     {
+      "sequence_id": "9714983f066f4c4087226a1c1631abbd",
       "name": "공잡기 리그랩까지",
       "max_seq_ms": 8000,
       "repeat_count": 1,
@@ -4464,7 +4472,7 @@
         {
           "frame_id": "fc6b61989c3f46398d96ea0a2fbed803",
           "name": "음",
-          "time_ms": 500,
+          "time_ms": 550,
           "angles": {
             "0": -0.087890625,
             "1": -0.439453125,
@@ -4573,7 +4581,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 500
+          "start_ms": 550
         },
         {
           "frame_id": "4fbcd221360045eebf548acb248187f8",
@@ -4630,7 +4638,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 1000
+          "start_ms": 1050
         },
         {
           "frame_id": "33d788bb392d44f0a6fc797ce28335cb",
@@ -4687,7 +4695,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 1500
+          "start_ms": 1550
         },
         {
           "frame_id": "02884fcd811c44e0a647e04d6915d83d",
@@ -4744,7 +4752,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 2052
+          "start_ms": 2102
         },
         {
           "frame_id": "fc6b61989c3f46398d96ea0a2fbed803",
@@ -4801,7 +4809,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 2952
+          "start_ms": 3002
         },
         {
           "name": "기본자세",
@@ -4858,7 +4866,7 @@
           },
           "is_important": false,
           "frame_id": "44435feaee474cbdb0b5eb1dcfdc2cc7",
-          "start_ms": 3452
+          "start_ms": 3502
         },
         {
           "frame_id": "cfac1845088f4a5e8e8c46995081f377",
@@ -4915,7 +4923,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 4352
+          "start_ms": 4402
         },
         {
           "frame_id": "bdf18f20f2ed4c5dab6c8beb8139e406",
@@ -4972,7 +4980,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 4452
+          "start_ms": 4502
         },
         {
           "frame_id": "cfac1845088f4a5e8e8c46995081f377",
@@ -5029,7 +5037,7 @@
             "22": true
           },
           "is_important": false,
-          "start_ms": 4552
+          "start_ms": 4602
         }
       ]
     }
@@ -5038,7 +5046,7 @@
     {
       "frame_id": "fc6b61989c3f46398d96ea0a2fbed803",
       "name": "음",
-      "time_ms": 500,
+      "time_ms": 550,
       "angles": {
         "0": -0.087890625,
         "1": -0.439453125,
@@ -5147,7 +5155,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 500
+      "start_ms": 550
     },
     {
       "frame_id": "4fbcd221360045eebf548acb248187f8",
@@ -5204,7 +5212,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 1000
+      "start_ms": 1050
     },
     {
       "frame_id": "33d788bb392d44f0a6fc797ce28335cb",
@@ -5261,7 +5269,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 1500
+      "start_ms": 1550
     },
     {
       "frame_id": "02884fcd811c44e0a647e04d6915d83d",
@@ -5318,7 +5326,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 2052
+      "start_ms": 2102
     },
     {
       "frame_id": "fc6b61989c3f46398d96ea0a2fbed803",
@@ -5375,7 +5383,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 2952
+      "start_ms": 3002
     },
     {
       "name": "기본자세",
@@ -5432,7 +5440,7 @@
       },
       "is_important": false,
       "frame_id": "44435feaee474cbdb0b5eb1dcfdc2cc7",
-      "start_ms": 3452
+      "start_ms": 3502
     },
     {
       "frame_id": "cfac1845088f4a5e8e8c46995081f377",
@@ -5489,7 +5497,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 4352
+      "start_ms": 4402
     },
     {
       "frame_id": "bdf18f20f2ed4c5dab6c8beb8139e406",
@@ -5546,7 +5554,7 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 4452
+      "start_ms": 4502
     },
     {
       "frame_id": "cfac1845088f4a5e8e8c46995081f377",
@@ -5603,8 +5611,9 @@
         "22": true
       },
       "is_important": false,
-      "start_ms": 4552
+      "start_ms": 4602
     }
   ],
-  "max_seq_ms": 8000
+  "max_seq_ms": 8000,
+  "loaded_sequence_id": "9714983f066f4c4087226a1c1631abbd"
 }

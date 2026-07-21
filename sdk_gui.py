@@ -1064,6 +1064,7 @@ class SDKMotionEditor(QWidget):
         self.frames = []          
         self.motion_sequence = [] 
         self.saved_sequences = [] 
+        self.loaded_sequence_id = None
         self.is_select_mode = False 
         self.autosave_enabled = False
         self.state_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), STATE_FILENAME)
@@ -1699,6 +1700,7 @@ class SDKMotionEditor(QWidget):
             "saved_sequences": copy.deepcopy(self.saved_sequences),
             "motion_sequence": copy.deepcopy(self.motion_sequence),
             "max_seq_ms": self.max_seq_ms,
+            "loaded_sequence_id": self.loaded_sequence_id,
         }
 
     @staticmethod
@@ -1771,6 +1773,7 @@ class SDKMotionEditor(QWidget):
         self.saved_sequences = []
         for seq in state.get("saved_sequences", []):
             sequence = {
+                "sequence_id": str(seq.get("sequence_id") or uuid.uuid4().hex),
                 "name": str(seq.get("name", "Sequence")),
                 "max_seq_ms": int(seq.get("max_seq_ms", 5000)),
                 "repeat_count": max(1, int(seq.get("repeat_count", 1))),
@@ -1785,11 +1788,13 @@ class SDKMotionEditor(QWidget):
         self.repair_legacy_sequence_timing(self.motion_sequence)
         self.link_sequence_frames_to_library()
         self.max_seq_ms = int(state.get("max_seq_ms", self.max_seq_ms))
+        self.loaded_sequence_id = state.get("loaded_sequence_id")
         if hasattr(self, "spin_max_time"):
             self.spin_max_time.setValue(self.max_seq_ms)
         self.rebuild_frame_list_ui()
         self.refresh_sequence_list()
         self.refresh_timeline_ui()
+        self.refresh_loaded_sequence_indicator()
 
     def undo_last_gui_change(self):
         """직전 자동 저장 상태를 복구합니다. 재시작 후에도 디스크 백업을 사용합니다."""
@@ -1865,6 +1870,7 @@ class SDKMotionEditor(QWidget):
             self.saved_sequences = []
             for seq in state.get("saved_sequences", []):
                 sequence = {
+                    "sequence_id": str(seq.get("sequence_id") or uuid.uuid4().hex),
                     "name": str(seq.get("name", "Sequence")),
                     "max_seq_ms": int(seq.get("max_seq_ms", 5000)),
                     "repeat_count": max(1, int(seq.get("repeat_count", 1))),
@@ -1877,12 +1883,14 @@ class SDKMotionEditor(QWidget):
             self.repair_legacy_sequence_timing(self.motion_sequence)
             self.link_sequence_frames_to_library()
             self.max_seq_ms = int(state.get("max_seq_ms", self.max_seq_ms))
+            self.loaded_sequence_id = state.get("loaded_sequence_id")
             if hasattr(self, 'spin_max_time'):
                 self.spin_max_time.setValue(self.max_seq_ms)
 
             self.rebuild_frame_list_ui()
             self.refresh_sequence_list()
             self.refresh_timeline_ui()
+            self.refresh_loaded_sequence_indicator()
             print(f"[✅ 자동 로드] 프레임 {len(self.frames)}개, 시퀀스 {len(self.saved_sequences)}개를 복원했습니다.")
         except Exception as e:
             print(f"[⚠️ 자동 로드 실패] {type(e).__name__}: {e}")
@@ -2274,6 +2282,12 @@ class SDKMotionEditor(QWidget):
         self.btn_save_sequence = QPushButton('💾 저장')
         self.btn_save_sequence.setStyleSheet("background-color: #17a2b8; color: white;")
         self.btn_save_sequence.clicked.connect(self.save_sequence)
+        self.btn_update_sequence = QPushButton('♻️ 현재 시퀀스 재저장')
+        self.btn_update_sequence.setStyleSheet(
+            "background-color: #6f42c1; color: white; font-weight: bold;"
+        )
+        self.btn_update_sequence.clicked.connect(self.update_loaded_sequence)
+        self.btn_update_sequence.setEnabled(False)
         self.btn_manage_seq = QPushButton('📁 관리/불러오기')
         self.btn_manage_seq.clicked.connect(self.open_sequence_manager)
         self.btn_export = QPushButton('🚀 Jetson 내보내기')
@@ -2294,6 +2308,7 @@ class SDKMotionEditor(QWidget):
         ctrl_layout.addSpacing(15)
         ctrl_layout.addWidget(self.btn_clear_motion)
         ctrl_layout.addWidget(self.btn_save_sequence)
+        ctrl_layout.addWidget(self.btn_update_sequence)
         ctrl_layout.addWidget(self.btn_manage_seq)
         ctrl_layout.addSpacing(15)
         ctrl_layout.addWidget(self.btn_export)
@@ -3060,7 +3075,9 @@ class SDKMotionEditor(QWidget):
         if not self.motion_sequence: return
         if QMessageBox.question(self, '확인', "모두 비우시겠습니까?", QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes:
             self.motion_sequence.clear()
+            self.loaded_sequence_id = None
             self.lbl_loaded_sequence.setText("현재 타임라인: 새 시퀀스")
+            self.update_sequence_save_button()
             self.refresh_timeline_ui()
 
     def save_sequence(self):
@@ -3069,12 +3086,18 @@ class SDKMotionEditor(QWidget):
         seq_name, ok = QInputDialog.getText(self, '저장', '새로운 시퀀스 이름 입력:')
         if ok and seq_name.strip():
             self.saved_sequences.append({
+                "sequence_id": uuid.uuid4().hex,
                 "name": seq_name.strip(), 
                 "max_seq_ms": self.max_seq_ms,
                 "repeat_count": self.spin_motion_repeat.value(),
                 "playback_speed": self.spin_motion_speed.value(),
                 "frames": copy.deepcopy(self.motion_sequence)
             })
+            self.loaded_sequence_id = self.saved_sequences[-1]["sequence_id"]
+            self.lbl_loaded_sequence.setText(
+                f"현재 타임라인: {seq_name.strip()} (저장됨)"
+            )
+            self.update_sequence_save_button()
             self.refresh_sequence_list()
             self.save_persistent_state()
             QMessageBox.information(self, "저장 완료", f"'{seq_name.strip()}' 시퀀스 저장됨.")
@@ -3083,6 +3106,8 @@ class SDKMotionEditor(QWidget):
         if idx < 0 or idx >= len(self.saved_sequences):
             return
         target_seq = self.saved_sequences[idx]
+        target_seq.setdefault("sequence_id", uuid.uuid4().hex)
+        self.loaded_sequence_id = target_seq["sequence_id"]
         self.max_seq_ms = target_seq.get("max_seq_ms", 5000)
         self.spin_max_time.setValue(self.max_seq_ms)
         self.spin_motion_repeat.setValue(max(1, int(target_seq.get("repeat_count", 1))))
@@ -3092,7 +3117,85 @@ class SDKMotionEditor(QWidget):
         self.motion_sequence = copy.deepcopy(target_seq["frames"])
         self.refresh_timeline_ui()
         self.lbl_loaded_sequence.setText(f"현재 타임라인: {target_seq['name']} (불러옴)")
+        self.update_sequence_save_button()
         self.tabs.setCurrentWidget(self.tab_motion)
+
+    def loaded_sequence_index(self):
+        if not self.loaded_sequence_id:
+            return -1
+        return next(
+            (
+                index for index, sequence in enumerate(self.saved_sequences)
+                if sequence.get("sequence_id") == self.loaded_sequence_id
+            ),
+            -1,
+        )
+
+    def update_sequence_save_button(self):
+        if not hasattr(self, "btn_update_sequence"):
+            return
+        index = self.loaded_sequence_index()
+        enabled = index >= 0
+        self.btn_update_sequence.setEnabled(enabled)
+        if enabled:
+            self.btn_update_sequence.setText(
+                f"♻️ '{self.saved_sequences[index]['name']}' 재저장"
+            )
+        else:
+            self.btn_update_sequence.setText("♻️ 현재 시퀀스 재저장")
+
+    def refresh_loaded_sequence_indicator(self):
+        index = self.loaded_sequence_index()
+        if index >= 0 and hasattr(self, "lbl_loaded_sequence"):
+            self.lbl_loaded_sequence.setText(
+                f"현재 타임라인: {self.saved_sequences[index]['name']} (불러옴)"
+            )
+        elif hasattr(self, "lbl_loaded_sequence"):
+            self.loaded_sequence_id = None
+            self.lbl_loaded_sequence.setText("현재 타임라인: 새 시퀀스")
+        self.update_sequence_save_button()
+
+    def update_loaded_sequence(self):
+        if not self.motion_sequence:
+            return QMessageBox.warning(self, "경고", "재저장할 타임라인이 비어있습니다.")
+        index = self.loaded_sequence_index()
+        if index < 0:
+            self.loaded_sequence_id = None
+            self.update_sequence_save_button()
+            return QMessageBox.warning(
+                self,
+                "재저장 불가",
+                "불러온 원본 시퀀스가 없습니다. 먼저 저장 시퀀스를 불러오거나 새로 저장하세요.",
+            )
+        sequence = self.saved_sequences[index]
+        name = sequence["name"]
+        reply = QMessageBox.question(
+            self,
+            "시퀀스 재저장",
+            f"'{name}' 시퀀스를 현재 타임라인 내용으로 덮어쓰시겠습니까?\n"
+            "프레임 시간, 반복 횟수, 재생속도가 함께 저장됩니다.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self.repair_legacy_sequence_timing(self.motion_sequence)
+        sequence.update({
+            "max_seq_ms": self.max_seq_ms,
+            "repeat_count": self.spin_motion_repeat.value(),
+            "playback_speed": self.spin_motion_speed.value(),
+            "frames": copy.deepcopy(self.motion_sequence),
+        })
+        self.refresh_sequence_list()
+        self.save_persistent_state()
+        self.lbl_loaded_sequence.setText(f"현재 타임라인: {name} (재저장됨)")
+        self.update_sequence_save_button()
+        QMessageBox.information(
+            self,
+            "재저장 완료",
+            f"'{name}' 시퀀스를 현재 타임라인 내용으로 재저장했습니다.\n"
+            "잘못 저장한 경우 Ctrl+Z로 복구할 수 있습니다.",
+        )
 
     def load_selected_sequence_to_timeline(self):
         item = self.sequence_list_ui.currentItem()
@@ -4692,6 +4795,7 @@ class SDKMotionEditor(QWidget):
         if sequence_idx is None or not (0 <= sequence_idx < len(self.saved_sequences)):
             return
         sequence_name = self.saved_sequences[sequence_idx]['name']
+        deleted_sequence_id = self.saved_sequences[sequence_idx].get("sequence_id")
         reply = QMessageBox.question(
             self,
             "시퀀스 삭제",
@@ -4706,6 +4810,10 @@ class SDKMotionEditor(QWidget):
         if self.playback_context == "composer":
             self.stop_motion_sequence()
         self.saved_sequences.pop(sequence_idx)
+        if deleted_sequence_id == self.loaded_sequence_id:
+            self.loaded_sequence_id = None
+            self.lbl_loaded_sequence.setText("현재 타임라인: 원본 시퀀스 삭제됨 (새로 저장 가능)")
+        self.update_sequence_save_button()
 
         remaining_entries = []
         for entry in self.sequence_composer_entries:
