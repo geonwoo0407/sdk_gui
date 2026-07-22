@@ -55,6 +55,9 @@ DEVICENAME                  = '/dev/ttyUSB0' # (자동 탐색기가 완전히 �
 DRIVE_MODE_TIME_BASED_BIT   = 0x04
 MIN_TIME_PROFILE_FIRMWARE   = 42
 MAX_TIME_PROFILE_MS         = 32737
+LANDING_FRAME_TAG           = "[착지]"
+LANDING_ACCEL_RATIO         = 0.10
+LANDING_ACCEL_MAX_MS        = 30
 TIMED_FEEDBACK_FREQUENCY_HZ = 100
 TIMED_FEEDBACK_INTERVAL_SEC = 1.0 / TIMED_FEEDBACK_FREQUENCY_HZ
 
@@ -1407,13 +1410,37 @@ class SDKMotionEditor(QWidget):
         print(f"[✅ 시간 기반 프로파일 준비] ID {ids} Drive Mode bit2=1")
         return True
 
-    def set_time_profile_duration(self, target_ids, duration_ms):
-        """동일 프레임에 참여하는 모터의 실제 도착시간을 ms 단위로 지정합니다."""
+    def set_time_profile_duration(self, target_ids, duration_ms, accel_ms=0):
+        """동일 프레임의 도착시간과 시작/종료 가감속 시간을 지정합니다.
+
+        accel_ms가 0이면 기존 동작과 동일합니다. Time-based Profile에서
+        Profile Acceleration은 시작 가속과 종료 감속 구간에 함께 적용됩니다.
+        """
         ids = sorted(set(int(j_id) for j_id in target_ids))
         if not ids or not set(ids).issubset(self.time_based_profile_ids):
             return False
 
         duration_ms = max(1, min(MAX_TIME_PROFILE_MS, int(math.ceil(duration_ms))))
+        accel_ms = max(0, min(duration_ms // 2, int(math.ceil(accel_ms))))
+
+        # 일반 프레임에도 0을 명시적으로 전송해 직전 [착지] 프레임의
+        # 가감속 설정이 다음 프레임에 남지 않도록 합니다.
+        acceleration_param = self.dxl_u32_param(accel_ms)
+        self.groupSyncWriteProfileAcceleration.clearParam()
+        for j_id in ids:
+            if not self.groupSyncWriteProfileAcceleration.addParam(
+                j_id, acceleration_param
+            ):
+                print(f"[❌ 가감속 설정 준비 실패] ID {j_id}")
+                return False
+        dxl_comm_result = self.groupSyncWriteProfileAcceleration.txPacket()
+        if dxl_comm_result != COMM_SUCCESS:
+            print(
+                f"[❌ 가감속 설정 실패] {accel_ms}ms: "
+                f"{self.packetHandler.getTxRxResult(dxl_comm_result)}"
+            )
+            return False
+
         duration_param = self.dxl_u32_param(duration_ms)
         self.groupSyncWriteProfileVelocity.clearParam()
         for j_id in ids:
@@ -1935,7 +1962,7 @@ class SDKMotionEditor(QWidget):
 
     def init_3d_viewer(self):
         blank = QWidget()
-        blank.setMinimumWidth(350)
+        blank.setMinimumWidth(200)
         blank.setMinimumHeight(300)
         blank.setStyleSheet("background: transparent; border: none;")
         return blank
@@ -1946,7 +1973,14 @@ class SDKMotionEditor(QWidget):
     def initUI(self):
         self.setWindowTitle('IRC STEP SDK MOTION made by geonwoo')
         screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(int(screen.width() * 0.95), int(screen.height() * 0.9))
+        window_width = int(screen.width() * 0.94)
+        window_height = int(screen.height() * 0.90)
+        self.setGeometry(
+            screen.x() + (screen.width() - window_width) // 2,
+            screen.y() + (screen.height() - window_height) // 2,
+            window_width,
+            window_height,
+        )
         main_layout = QVBoxLayout()
         self.lbl_conn_status = QLabel("⚠️ 다이나믹셀 하드웨어 포트 연결 대기 중...")
         self.lbl_conn_status.setAlignment(Qt.AlignCenter)
@@ -1964,7 +1998,7 @@ class SDKMotionEditor(QWidget):
         self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
         self.undo_shortcut.activated.connect(self.undo_last_gui_change)
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("QTabBar::tab { min-height: 50px; min-width: 420px; font-size: 14pt; font-weight: bold; padding: 10px; }")
+        self.tabs.setStyleSheet("QTabBar::tab { min-height: 50px; min-width: 260px; font-size: 14pt; font-weight: bold; padding: 10px; }")
         self.tab_frame = QWidget()
         self.init_frame_tab(self.tab_frame)
         self.tab_motion = QWidget()
@@ -2028,12 +2062,12 @@ class SDKMotionEditor(QWidget):
             lbl_id.setStyleSheet("font-weight: bold; font-size: 13pt; color: #0055A4;")
             color = "#FF8C00" if joint["type"] == "28" else "#228B22" if joint["type"] == "64" else "#333333"
             lbl_name = QLabel(f"{joint['name']}\n(MX-{joint['type']})")
-            lbl_name.setMinimumWidth(180)
+            lbl_name.setMinimumWidth(140)
             lbl_name.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 12pt;")
             
             slider = NoWheelSlider(Qt.Horizontal)
             slider.setRange(-180, 180)
-            slider.setMinimumWidth(280) 
+            slider.setMinimumWidth(160) 
             slider.setEnabled(False) 
             
             spinbox = NoWheelSpinBox()
@@ -4047,7 +4081,19 @@ class SDKMotionEditor(QWidget):
         )
         remaining_timeline_ms = max(1, frame_end_ms - int(t_ms))
         real_duration_ms = max(1, int(math.ceil(remaining_timeline_ms / self.playback_speed)))
-        if not self.set_time_profile_duration(target_ids, real_duration_ms):
+        frame_name = str(frame.get("name", ""))
+        is_landing_frame = LANDING_FRAME_TAG in frame_name.lower()
+        accel_ms = 0
+        if is_landing_frame:
+            accel_ms = min(
+                int(real_duration_ms * LANDING_ACCEL_RATIO),
+                LANDING_ACCEL_MAX_MS,
+            )
+        if not self.set_time_profile_duration(
+            target_ids,
+            real_duration_ms,
+            accel_ms=accel_ms,
+        ):
             return False, False
         if not self.write_goal_positions(
             frame_angles,
@@ -4068,7 +4114,9 @@ class SDKMotionEditor(QWidget):
         print(
             f"[⏱️ 시간지정 프레임] '{frame.get('name', 'Frame')}' "
             f"timeline_remaining={remaining_timeline_ms}ms, "
-            f"motor_arrival={real_duration_ms}ms, speed={self.playback_speed:.1f}x, "
+            f"motor_arrival={real_duration_ms}ms, accel={accel_ms}ms, "
+            f"landing={'yes' if is_landing_frame else 'no'}, "
+            f"speed={self.playback_speed:.1f}x, "
             f"required_max={required_speeds[max_speed_id]:.1f}deg/s(ID {max_speed_id})"
         )
         return True, True

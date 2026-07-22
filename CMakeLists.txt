@@ -33,21 +33,25 @@ add_test(NAME motion_pattern_test COMMAND test_motion_pattern)
 add_test(NAME motion_callback_test COMMAND test_motion_callback)
 
 if(DYNAMIXEL_SDK_INCLUDE_DIR AND DYNAMIXEL_SDK_LIBRARY)
-    add_executable(irc_robot
-        main.cpp
+    add_library(robot_control
+        robot_motion_player.cpp
         step_dynamixel.cpp
         dynamixel_controller.cpp
     )
-    target_include_directories(irc_robot PRIVATE
+    target_include_directories(robot_control PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${DYNAMIXEL_SDK_INCLUDE_DIR}
     )
-    target_link_libraries(irc_robot PRIVATE
+    target_link_libraries(robot_control PUBLIC
         motion_core
         Eigen3::Eigen
         Threads::Threads
         ${DYNAMIXEL_SDK_LIBRARY}
     )
+    target_compile_options(robot_control PRIVATE -Wall -Wextra -Wpedantic)
+
+    add_executable(irc_robot main.cpp)
+    target_link_libraries(irc_robot PRIVATE robot_control)
     target_compile_options(irc_robot PRIVATE -Wall -Wextra -Wpedantic)
 else()
     message(WARNING "DYNAMIXEL SDK not found: irc_robot target will not be built")

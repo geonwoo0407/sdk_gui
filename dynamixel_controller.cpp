@@ -87,11 +87,12 @@ bool Dxl_Controller::ConfigureTimeBasedProfile()
 
 bool Dxl_Controller::SetTimeBasedPosition(
     const VectorXd& theta, const std::vector<int>& motor_ids,
-    uint32_t duration_ms)
+    uint32_t duration_ms, uint32_t acceleration_ms)
 {
     if (theta.size() != NUMBER_OF_DYNAMIXELS) return false;
     for (uint8_t i = 0; i < NUMBER_OF_DYNAMIXELS; ++i) th_cont[i] = theta[i];
-    return dxlPtr->syncWriteTimeBasedTheta(th_cont, motor_ids, duration_ms);
+    return dxlPtr->syncWriteTimeBasedTheta(
+        th_cont, motor_ids, duration_ms, acceleration_ms);
 }
 
 bool Dxl_Controller::SetTorqueEnabled(bool enabled)

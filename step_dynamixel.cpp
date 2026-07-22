@@ -343,18 +343,24 @@ bool Dxl::ConfigureTimeBasedProfile()
 
 bool Dxl::syncWriteTimeBasedTheta(const VectorXd& theta,
                                   const std::vector<int>& motor_ids,
-                                  uint32_t duration_ms)
+                                  uint32_t duration_ms,
+                                  uint32_t acceleration_ms)
 {
     if (!port_opened_ || theta.size() != NUMBER_OF_DYNAMIXELS
         || motor_ids.empty()) return false;
     duration_ms = std::clamp<uint32_t>(duration_ms, 1, MAX_TIME_PROFILE_MS);
+    acceleration_ms = std::min<uint32_t>(acceleration_ms, duration_ms / 2);
 
+    dynamixel::GroupSyncWrite acceleration_writer(
+        portHandler, packetHandler, DxlReg_ProfileAcceleration, 4);
     dynamixel::GroupSyncWrite duration_writer(
         portHandler, packetHandler, DxlReg_ProfileVelocity, 4);
     dynamixel::GroupSyncWrite goal_writer(
         portHandler, packetHandler, DxlReg_GoalPosition, 4);
     uint8_t duration_param[4] = {0};
+    uint8_t acceleration_param[4] = {0};
     getParam(static_cast<int32_t>(duration_ms), duration_param);
+    getParam(static_cast<int32_t>(acceleration_ms), acceleration_param);
 
     for (const int id : motor_ids) {
         if (id < 0 || id >= NUMBER_OF_DYNAMIXELS) return false;
@@ -363,11 +369,16 @@ bool Dxl::syncWriteTimeBasedTheta(const VectorXd& theta,
         const int32_t raw = std::clamp(
             static_cast<int32_t>(std::lround(absolute_rad * RAD_TO_VALUE)), 0, 4095);
         getParam(raw, goal_param);
-        if (!duration_writer.addParam(static_cast<uint8_t>(id), duration_param)
+        if (!acceleration_writer.addParam(static_cast<uint8_t>(id), acceleration_param)
+            || !duration_writer.addParam(static_cast<uint8_t>(id), duration_param)
             || !goal_writer.addParam(static_cast<uint8_t>(id), goal_param)) return false;
     }
+    // GUI와 동일하게 Profile Acceleration -> Profile Time -> Goal 순서로 쓴다.
+    // 일반 프레임도 0을 써서 직전 [착지] 설정이 남지 않게 한다.
+    if (acceleration_writer.txPacket() != COMM_SUCCESS) return false;
     if (duration_writer.txPacket() != COMM_SUCCESS) return false;
     if (goal_writer.txPacket() != COMM_SUCCESS) return false;
+    acceleration_writer.clearParam();
     duration_writer.clearParam();
     goal_writer.clearParam();
     return true;

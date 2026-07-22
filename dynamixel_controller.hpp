@@ -36,7 +36,7 @@ class Dxl_Controller
         virtual bool ConfigureTimeBasedProfile();
         virtual bool SetTimeBasedPosition(
             const VectorXd& theta, const std::vector<int>& motor_ids,
-            uint32_t duration_ms);
+            uint32_t duration_ms, uint32_t acceleration_ms = 0);
         virtual bool SetTorqueEnabled(bool enabled);
         
 };

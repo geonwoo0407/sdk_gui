@@ -127,3 +127,72 @@ cmake --build build -j
 - GUI에서 +각도로 움직이는 방향과 실제 모터의 +방향이 모든 관절에서 같은지 확인하십시오.
 - 첫 시험은 로봇을 지지한 상태에서 한 프레임·낮은 동작 범위로 진행하십시오.
 - 토크/전류 제어로 전환할 때는 Position Mode용 Pattern 재생과 동시에 실행하지 마십시오.
+# Algorithm integration (Jetson)
+
+`main.cpp` is only a terminal test program. The vision/line-tracing program
+should include `robot_motion_player.hpp` and link the CMake `robot_control`
+library. This library already contains the motion JSON, controller, and low-level
+DYNAMIXEL implementation dependencies.
+
+```cpp
+#include "robot_motion_player.hpp"
+
+int main() {
+    irc_step::RobotMotionPlayer player("robot_motions.json");
+
+    while (true) {
+        // RealSense algorithm decides the next motion.
+        if (!player.running()) {
+            player.start("전진"); // or 좌회전 / 우회전 / 정지
+        }
+
+        // Must be called continuously while a motion is running.
+        player.update();
+        // Run the camera/event loop here as well.
+    }
+}
+```
+
+```cmake
+add_executable(line_follower algorithm_main.cpp)
+target_link_libraries(line_follower PRIVATE robot_control)
+```
+
+Runtime flow:
+
+```text
+RealSense decision
+  -> RobotMotionPlayer::start(motion name)
+  -> robot_motions.json frame
+  -> Profile Acceleration + Profile Time + Goal Position
+  -> DYNAMIXEL internal trajectory and PID
+```
+
+Frames whose names contain `[착지]` use a time-based acceleration/deceleration
+window equal to 10% of the actual frame duration, capped at 30 ms. Other frames
+explicitly use 0 ms, so the landing setting never leaks into the next frame.
+
+Small algorithm corrections can be applied before starting the next step:
+
+```cpp
+player.setJointCorrection(19, -0.5); // degrees
+player.setJointCorrection(20,  0.5);
+```
+
+These joint corrections apply to that motor in every motion and frame. A
+correction for only one named frame can be registered with both its motion and
+frame name:
+
+```cpp
+player.setFrameCorrection("전진", "L_내딛기[착지]", 19, 1.0);
+```
+
+The final target is:
+
+```text
+JSON frame angle + global joint correction + motion/frame correction
+```
+
+Use `clearJointCorrections()` or `clearFrameCorrections()` to remove one kind,
+and `clearCorrections()` to remove both. If the same frame name occurs more than
+once in one motion, the named frame correction applies to every occurrence.

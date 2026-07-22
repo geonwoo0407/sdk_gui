@@ -214,7 +214,7 @@ class Dxl
         virtual bool ConfigureTimeBasedProfile();
         virtual bool syncWriteTimeBasedTheta(
             const VectorXd& theta, const std::vector<int>& motor_ids,
-            uint32_t duration_ms);
+            uint32_t duration_ms, uint32_t acceleration_ms = 0);
         virtual bool SetTorqueEnabled(bool enabled);
         virtual bool IsReady() const;
         void SetPIDGain(VectorXd PID_Gain);
