@@ -154,6 +154,17 @@ double optionalNumber(const Json::Object& object, std::string_view key, double f
     return it == object.end() ? fallback : it->second.number();
 }
 
+bool optionalBool(const Json::Object& object, std::string_view key, bool fallback) {
+    const auto it = object.find(std::string(key));
+    return it == object.end() ? fallback : it->second.boolean();
+}
+
+std::string optionalString(
+    const Json::Object& object, std::string_view key, std::string fallback) {
+    const auto it = object.find(std::string(key));
+    return it == object.end() ? std::move(fallback) : it->second.string();
+}
+
 MotionPattern parseMotionObject(const Json::Object& root) {
     const auto max_seq_ms = static_cast<std::int64_t>(required(root, "max_seq_ms").number());
     const auto repeat_count = static_cast<int>(optionalNumber(root, "repeat_count", 1));
@@ -172,7 +183,31 @@ MotionPattern parseMotionObject(const Json::Object& root) {
                 frame.torques[std::stoi(id)] = value.boolean();
         frames.push_back(std::move(frame));
     }
-    return MotionPattern(std::move(frames), max_seq_ms, repeat_count, playback_speed);
+    MotionCompletion completion;
+    if (const auto it = root.find("completion"); it != root.end()) {
+        const auto& completion_json = it->second.object();
+        completion.position_tolerance_deg = optionalNumber(
+            completion_json, "position_tolerance_deg",
+            completion.position_tolerance_deg);
+        completion.settle_duration_ms = static_cast<std::int64_t>(
+            optionalNumber(
+                completion_json, "settle_duration_ms",
+                completion.settle_duration_ms));
+        completion.settle_timeout_ms = static_cast<std::int64_t>(
+            optionalNumber(
+                completion_json, "settle_timeout_ms",
+                completion.settle_timeout_ms));
+    }
+    const std::string default_start =
+        frames.empty() ? std::string{} : frames.front().name;
+    const std::string default_end =
+        frames.empty() ? std::string{} : frames.back().name;
+    return MotionPattern(
+        std::move(frames), max_seq_ms, repeat_count, playback_speed,
+        optionalBool(root, "repeatable", true),
+        optionalString(root, "start_pose", default_start),
+        optionalString(root, "end_pose", default_end),
+        completion);
 }
 
 }  // namespace
@@ -186,12 +221,26 @@ MotionPattern MotionPattern::loadGuiJson(const std::filesystem::path& path) {
 }
 
 MotionPattern::MotionPattern(std::vector<MotionFrame> frames, std::int64_t max_seq_ms,
-                             int repeat_count, double playback_speed)
+                             int repeat_count, double playback_speed,
+                             bool repeatable, std::string start_pose,
+                             std::string end_pose,
+                             MotionCompletion completion)
     : frames_(std::move(frames)),
       max_seq_ms_(max_seq_ms),
       repeat_count_(std::max(1, repeat_count)),
-      playback_speed_(std::clamp(playback_speed, 0.1, 5.0)) {
+      playback_speed_(std::clamp(playback_speed, 0.1, 5.0)),
+      repeatable_(repeatable),
+      start_pose_(std::move(start_pose)),
+      end_pose_(std::move(end_pose)),
+      completion_(completion) {
     validate();
+    if (start_pose_.empty() && !frames_.empty()) start_pose_ = frames_.front().name;
+    if (end_pose_.empty() && !frames_.empty()) end_pose_ = frames_.back().name;
+    if (completion_.position_tolerance_deg <= 0.0
+        || completion_.settle_duration_ms < 0
+        || completion_.settle_timeout_ms < completion_.settle_duration_ms) {
+        throw std::runtime_error("invalid motion completion metadata");
+    }
     buildTrajectories();
 }
 

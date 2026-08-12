@@ -29,6 +29,12 @@ struct MotionTarget {
     bool finished{false};
 };
 
+struct MotionCompletion {
+    double position_tolerance_deg{2.0};
+    std::int64_t settle_duration_ms{80};
+    std::int64_t settle_timeout_ms{3000};
+};
+
 // 새 모션을 만드는 클래스가 아니다.
 // GUI가 저장한 모션을 읽고, GUI와 같은 방식으로 현재 목표각을 꺼내는 클래스다.
 class MotionPattern {
@@ -38,7 +44,11 @@ public:
     MotionPattern(std::vector<MotionFrame> frames,
                   std::int64_t max_seq_ms,
                   int repeat_count = 1,
-                  double playback_speed = 1.0);
+                  double playback_speed = 1.0,
+                  bool repeatable = true,
+                  std::string start_pose = {},
+                  std::string end_pose = {},
+                  MotionCompletion completion = {});
 
     // 재생 시작 직전 실제 로봇의 현재각을 넣는다.
     void setInitialAngles(JointAngles angles);
@@ -53,6 +63,12 @@ public:
     [[nodiscard]] std::int64_t maxSequenceMs() const noexcept { return max_seq_ms_; }
     [[nodiscard]] int repeatCount() const noexcept { return repeat_count_; }
     [[nodiscard]] double playbackSpeed() const noexcept { return playback_speed_; }
+    [[nodiscard]] bool repeatable() const noexcept { return repeatable_; }
+    [[nodiscard]] const std::string& startPose() const noexcept { return start_pose_; }
+    [[nodiscard]] const std::string& endPose() const noexcept { return end_pose_; }
+    [[nodiscard]] const MotionCompletion& completion() const noexcept {
+        return completion_;
+    }
 
 private:
     struct QuinticSegment {
@@ -79,6 +95,10 @@ private:
     std::int64_t duration_ms_{0};
     int repeat_count_{1};
     double playback_speed_{1.0};
+    bool repeatable_{true};
+    std::string start_pose_;
+    std::string end_pose_;
+    MotionCompletion completion_;
 };
 
 // robot_motions.json 하나에 들어 있는 여러 시퀀스를 이름으로 관리한다.

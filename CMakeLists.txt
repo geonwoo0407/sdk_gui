@@ -28,13 +28,26 @@ target_compile_definitions(test_motion_pattern PRIVATE
 add_executable(test_motion_callback test_motion_callback.cpp)
 target_link_libraries(test_motion_callback PRIVATE motion_core)
 
+add_library(motion_player_core
+    robot_motion_player.cpp
+)
+target_include_directories(motion_player_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(motion_player_core PUBLIC motion_core)
+target_compile_options(motion_player_core PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(test_robot_motion_player test_robot_motion_player.cpp)
+target_link_libraries(test_robot_motion_player PRIVATE motion_player_core)
+target_compile_options(test_robot_motion_player PRIVATE -Wall -Wextra -Wpedantic)
+
 enable_testing()
 add_test(NAME motion_pattern_test COMMAND test_motion_pattern)
 add_test(NAME motion_callback_test COMMAND test_motion_callback)
+add_test(NAME robot_motion_player_test COMMAND test_robot_motion_player)
 
 if(DYNAMIXEL_SDK_INCLUDE_DIR AND DYNAMIXEL_SDK_LIBRARY)
     add_library(robot_control
-        robot_motion_player.cpp
+        robot_motion_player_dynamixel.cpp
+        dynamixel_motion_hardware.cpp
         step_dynamixel.cpp
         dynamixel_controller.cpp
     )
@@ -43,7 +56,7 @@ if(DYNAMIXEL_SDK_INCLUDE_DIR AND DYNAMIXEL_SDK_LIBRARY)
         ${DYNAMIXEL_SDK_INCLUDE_DIR}
     )
     target_link_libraries(robot_control PUBLIC
-        motion_core
+        motion_player_core
         Eigen3::Eigen
         Threads::Threads
         ${DYNAMIXEL_SDK_LIBRARY}

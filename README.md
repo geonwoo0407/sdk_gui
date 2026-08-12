@@ -127,29 +127,24 @@ cmake --build build -j
 - GUI에서 +각도로 움직이는 방향과 실제 모터의 +방향이 모든 관절에서 같은지 확인하십시오.
 - 첫 시험은 로봇을 지지한 상태에서 한 프레임·낮은 동작 범위로 진행하십시오.
 - 토크/전류 제어로 전환할 때는 Position Mode용 Pattern 재생과 동시에 실행하지 마십시오.
-# Algorithm integration (Jetson)
+# ROS2 Motion Executor integration
 
-`main.cpp` is only a terminal test program. The vision/line-tracing program
-should include `robot_motion_player.hpp` and link the CMake `robot_control`
-library. This library already contains the motion JSON, controller, and low-level
-DYNAMIXEL implementation dependencies.
+`main.cpp`는 SDK/실기 확인용 터미널 프로그램입니다. 비전 노드가
+`RobotMotionPlayer`를 직접 소유하지 않고, 별도 ROS2 Motion Executor가
+`robot_control`을 링크합니다.
 
 ```cpp
 #include "robot_motion_player.hpp"
 
 int main() {
     irc_step::RobotMotionPlayer player("robot_motions.json");
+    if (!player.initialize()) return 1;
 
-    while (true) {
-        // RealSense algorithm decides the next motion.
-        if (!player.running()) {
-            player.start("전진"); // or 좌회전 / 우회전 / 정지
-        }
-
-        // Must be called continuously while a motion is running.
+    if (player.start("전진") != irc_step::StartResult::Accepted) return 1;
+    while (player.running()) {
         player.update();
-        // Run the camera/event loop here as well.
     }
+    return player.succeeded() ? 0 : 1;
 }
 ```
 
@@ -158,15 +153,41 @@ add_executable(line_follower algorithm_main.cpp)
 target_link_libraries(line_follower PRIVATE robot_control)
 ```
 
-Runtime flow:
+권장 실행 구조:
 
 ```text
-RealSense decision
+Vision/Mission
+  -> ROS2 Motion Executor
   -> RobotMotionPlayer::start(motion name)
   -> robot_motions.json frame
   -> Profile Acceleration + Profile Time + Goal Position
   -> DYNAMIXEL internal trajectory and PID
 ```
+
+Player 상태는 `Idle`, `Running`, `Settling`, `Succeeded`, `Cancelled`,
+`Failed`입니다. `update()`는 예외를 ROS timer 밖으로 던지지 않고
+`result()`와 `lastError()`에 실패 원인을 저장합니다. 실행 중 새 `start()`는
+`RejectedBusy`로 거부됩니다.
+
+각 프레임의 지정 시간은 최소 이동시간입니다. 그 시간이 끝나도 실제
+Present Position이 JSON 목표각의 허용오차 안에 들어오지 않으면 모션 시계를
+해당 프레임 끝에 고정하고 다음 프레임을 전송하지 않습니다. 메타데이터의
+`settle_timeout_ms`까지 도달하지 못하면 현재 위치를 홀드하고
+`PositionTimeout`으로 실패합니다.
+
+일반 ROS cancel은 `cancel()`을 호출합니다. 이 함수는 Present Position을
+읽어 같은 위치를 새 Goal로 전송하므로 토크를 유지한 채 멈춥니다.
+`emergencyStop()`은 전체 토크를 해제하므로 비상시에만 사용합니다.
+
+`IMotionHardware`를 주입하는 생성자로 모터 없는 테스트를 작성할 수 있습니다.
+
+```cpp
+irc_step::MockMotionHardware hardware;
+irc_step::RobotMotionPlayer player("robot_motions.json", hardware);
+```
+
+`test_robot_motion_player`는 정상 완료, busy 거부, cancel, 프레임 전송 실패,
+최종 위치 timeout을 검증합니다.
 
 Frames whose names contain `[착지]` use a time-based acceleration/deceleration
 window equal to 10% of the actual frame duration, capped at 30 ms. Other frames

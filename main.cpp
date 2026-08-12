@@ -12,12 +12,27 @@ std::atomic_bool stop_requested{false};
 void requestStop(int) { stop_requested.store(true); }
 
 bool runMotion(irc_step::RobotMotionPlayer& player, const std::string& name) {
-    if (!player.start(name)) return false;
+    using irc_step::CancelResult;
+    using irc_step::StartResult;
+    const auto start_result = player.start(name);
+    if (start_result != StartResult::Accepted) {
+        std::cerr << "[Error] Motion start rejected ("
+                  << static_cast<int>(start_result) << "): "
+                  << player.lastError() << std::endl;
+        return false;
+    }
     while (player.running() && !stop_requested.load()) {
         player.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    if (stop_requested.load()) player.stop();
+    if (stop_requested.load()) {
+        const auto cancel_result = player.cancel();
+        return cancel_result == CancelResult::Cancelled;
+    }
+    if (!player.succeeded()) {
+        std::cerr << "[Error] Motion failed: " << player.lastError() << std::endl;
+        return false;
+    }
     return true;
 }
 }
@@ -36,6 +51,11 @@ int main(int argc, char** argv) {
 
     try {
         RobotMotionPlayer player(argv[1]);
+        if (!player.initialize()) {
+            std::cerr << "[Error] Hardware initialization failed: "
+                      << player.lastError() << std::endl;
+            return 1;
+        }
         if (argc > 2) {
             if (!runMotion(player, argv[2])) {
                 std::cerr << "[Error] Motion not found or player busy: " << argv[2]
