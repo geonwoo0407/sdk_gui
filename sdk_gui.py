@@ -1045,6 +1045,10 @@ class SequenceTimelineBlockWidget(QFrame):
         gap_spin.setRange(0, 60000)
         gap_spin.setSingleStep(10)
         gap_spin.setSuffix(" ms")
+        # 숫자를 입력하는 중에 타임라인을 매 자릿수마다
+        # 재계산하지 않고 Enter(또는 편집 확정) 후에만 적용합니다.
+        gap_spin.setKeyboardTracking(False)
+        gap_spin.setToolTip("숫자 입력 후 Enter를 누르면 적용됩니다.")
         gap_spin.setValue(int(entry.get('gap_before_ms', 0)))
         gap_spin.valueChanged.connect(
             lambda value: self.parent_gui.set_composer_entry_gap(self.entry, value)
@@ -1054,6 +1058,8 @@ class SequenceTimelineBlockWidget(QFrame):
         repeat_spin = QSpinBox()
         repeat_spin.setRange(1, 999)
         repeat_spin.setSuffix(" 회")
+        repeat_spin.setKeyboardTracking(False)
+        repeat_spin.setToolTip("숫자 입력 후 Enter를 누르면 적용됩니다.")
         repeat_spin.setValue(int(entry.get('repeat_count', 1)))
         repeat_spin.valueChanged.connect(
             lambda value: self.parent_gui.set_composer_entry_repeat(self.entry, value)
@@ -1072,6 +1078,8 @@ class SequenceTimelineBlockWidget(QFrame):
             time_spin.setRange(MIN_TIMELINE_FRAME_MS, 60000)
             time_spin.setSingleStep(10)
             time_spin.setSuffix(" ms")
+            time_spin.setKeyboardTracking(False)
+            time_spin.setToolTip("숫자 입력 후 Enter를 누르면 적용됩니다.")
             time_spin.setValue(int(entry.get('base_duration_ms', entry['time_ms'])))
             time_spin.valueChanged.connect(
                 lambda value: self.parent_gui.set_composer_frame_duration(
