@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QSlider, QLabel, QPushButton, QListWidget, QFileDialog, 
                              QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QFrame, QInputDialog,
                              QTabWidget, QMessageBox, QGridLayout, QCheckBox, QListWidgetItem, QAbstractItemView,
-                             QOpenGLWidget, QShortcut, QComboBox)
+                             QOpenGLWidget, QShortcut, QComboBox, QLineEdit)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPainter, QColor, QPen, QMatrix4x4, QKeySequence, QPainterPath
 
@@ -236,6 +236,68 @@ class FrameItemWidget(QWidget):
         self.frame_data['is_important'] = is_imp
         self.btn_star.setText('★' if is_imp else '☆')
         self.parent_gui.refresh_library_lists()
+
+
+class SequenceItemWidget(QWidget):
+    """저장 시퀀스의 배포 선택과 원클릭 재생을 한 행에 표시합니다."""
+
+    def __init__(self, sequence_data, sequence_idx, parent_gui):
+        super().__init__()
+        self.sequence_idx = sequence_idx
+        self.parent_gui = parent_gui
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 3, 5, 3)
+        layout.setSpacing(8)
+
+        self.export_checkbox = QCheckBox("배포")
+        self.export_checkbox.setChecked(
+            bool(sequence_data.get("export_enabled", False))
+        )
+        self.export_checkbox.setToolTip(
+            "체크하면 배포용 최종 JSON에 포함됩니다."
+        )
+        self.export_checkbox.toggled.connect(self.set_export_enabled)
+
+        self.label = QLabel(
+            f"[{sequence_idx + 1}] {sequence_data.get('name', 'Sequence')} "
+            f"({len(sequence_data.get('frames', []))} 프레임 / "
+            f"{sequence_data.get('repeat_count', 1)}회 / "
+            f"{sequence_data.get('playback_speed', 1.0):.2f}x)"
+        )
+        self.label.setStyleSheet("font-weight: bold; color: #212121;")
+        self.label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        self.play_button = QPushButton("▶ 바로 재생")
+        self.play_button.setStyleSheet(
+            "background-color: #fb8c00; color: white; font-weight: bold; "
+            "padding: 5px 10px;"
+        )
+        self.play_button.setToolTip(
+            "로봇 동기화 ON이면 실물 로봇, OFF이면 GUI 미리보기로 바로 재생합니다."
+        )
+        self.play_button.clicked.connect(self.play_sequence)
+
+        layout.addWidget(self.export_checkbox)
+        layout.addWidget(self.label, 1)
+        layout.addWidget(self.play_button)
+
+    def select_row(self):
+        sequence_list = getattr(self.parent_gui, "sequence_list_ui", None)
+        if sequence_list is not None and self.sequence_idx < sequence_list.count():
+            sequence_list.setCurrentRow(self.sequence_idx)
+
+    def set_export_enabled(self, checked):
+        self.select_row()
+        self.parent_gui.set_sequence_export_enabled(self.sequence_idx, checked)
+
+    def play_sequence(self):
+        self.select_row()
+        self.parent_gui.play_saved_sequence_direct(self.sequence_idx)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.select_row()
+        super().mousePressEvent(event)
 
 # ----------------------------------------------------
 # 타임라인 클립 위젯
@@ -950,7 +1012,8 @@ class SequenceTimelineBlockWidget(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
         top = QHBoxLayout()
-        label = QLabel(f"[{index + 1}] {entry['name']}")
+        type_text = "프레임" if entry.get("kind") == "frame" else "시퀀스"
+        label = QLabel(f"[{index + 1}] [{type_text}] {entry['name']}")
         label.setStyleSheet("color: white; font-weight: bold; font-size: 11pt;")
         delete_button = QPushButton("❌")
         delete_button.setFixedWidth(24)
@@ -960,18 +1023,65 @@ class SequenceTimelineBlockWidget(QFrame):
         top.addStretch()
         top.addWidget(delete_button)
         leading_wait_ms = int(entry.get('leading_wait_ms', 0))
+        explicit_gap_ms = int(entry.get('gap_before_ms', 0))
         wait_text = (
-            f"맨 앞 대기 {leading_wait_ms}ms / "
+            f"조합 앞 대기 {explicit_gap_ms}ms / "
+            f"실제 첫 목표까지 대기 {leading_wait_ms}ms / "
             if leading_wait_ms > 0
-            else "맨 앞 대기 없음 / "
+            else "앞 대기 없음 / "
         )
         duration = QLabel(
             f"{wait_text}전체 {entry['time_ms']}ms / "
-            f"{entry['frame_count']} 프레임"
+            f"{entry['frame_count']} 실행 프레임 / "
+            f"{entry.get('repeat_count', 1)}회"
         )
         duration.setStyleSheet("color: white;")
         layout.addLayout(top)
         layout.addWidget(duration)
+        settings_layout = QHBoxLayout()
+        gap_label = QLabel("앞 대기:")
+        gap_label.setStyleSheet("color: white; font-weight: bold;")
+        gap_spin = QSpinBox()
+        gap_spin.setRange(0, 60000)
+        gap_spin.setSingleStep(10)
+        gap_spin.setSuffix(" ms")
+        gap_spin.setValue(int(entry.get('gap_before_ms', 0)))
+        gap_spin.valueChanged.connect(
+            lambda value: self.parent_gui.set_composer_entry_gap(self.entry, value)
+        )
+        repeat_label = QLabel("반복:")
+        repeat_label.setStyleSheet("color: white; font-weight: bold;")
+        repeat_spin = QSpinBox()
+        repeat_spin.setRange(1, 999)
+        repeat_spin.setSuffix(" 회")
+        repeat_spin.setValue(int(entry.get('repeat_count', 1)))
+        repeat_spin.valueChanged.connect(
+            lambda value: self.parent_gui.set_composer_entry_repeat(self.entry, value)
+        )
+        settings_layout.addWidget(gap_label)
+        settings_layout.addWidget(gap_spin)
+        settings_layout.addWidget(repeat_label)
+        settings_layout.addWidget(repeat_spin)
+        settings_layout.addStretch()
+        layout.addLayout(settings_layout)
+        if entry.get("kind") == "frame":
+            time_layout = QHBoxLayout()
+            time_label = QLabel("이동 시간:")
+            time_label.setStyleSheet("color: white; font-weight: bold;")
+            time_spin = QSpinBox()
+            time_spin.setRange(MIN_TIMELINE_FRAME_MS, 60000)
+            time_spin.setSingleStep(10)
+            time_spin.setSuffix(" ms")
+            time_spin.setValue(int(entry.get('base_duration_ms', entry['time_ms'])))
+            time_spin.valueChanged.connect(
+                lambda value: self.parent_gui.set_composer_frame_duration(
+                    self.entry, value
+                )
+            )
+            time_layout.addWidget(time_label)
+            time_layout.addWidget(time_spin)
+            time_layout.addStretch()
+            layout.addLayout(time_layout)
 
         # 시퀀스 박스 안에 대기 구간과 모든 프레임을 시간 비율로
         # 나란히 표시해, 원본 시퀀스를 불러오지 않고도 내용을
@@ -1102,48 +1212,22 @@ class SequenceTimelineContainer(QWidget):
         self.parent_gui.scrub_timeline(int(x / self.parent_gui.COMPOSER_SCALE))
 
     def dropEvent(self, event):
-        item = self.parent_gui.composer_source_list.currentItem()
-        if item is None:
-            return
-        self.parent_gui.add_sequence_to_composer(
-            sequence_idx=item.data(Qt.UserRole),
-            drop_x=event.pos().x(),
-        )
-        event.accept()
-
-    def dragMoveEvent(self, event):
-        event.accept()
-
-    def dropEvent(self, event):
-        selected_items = self.parent_gui.frame_list_all.selectedItems()
-        if not selected_items: return
-
-        drop_x = event.pos().x()
-        start_ms = int(drop_x / self.parent_gui.SCALE)
-
-        for item in selected_items:
-            original_idx = item.data(Qt.UserRole)
-            new_frame = copy.deepcopy(self.parent_gui.frames[original_idx])
-            new_frame["source_frame_id"] = new_frame.get("frame_id")
-            # 이 기능 추가 이후 새로 구성하는 타임라인에만 조기 도착을
-            # 적용합니다. 기존 저장 시퀀스에는 이 필드가 없어 영향이 없습니다.
-            new_frame["lift_early_arrival"] = True
-            # 라이브러리의 시간은 단일 자세 적용용이다. 시퀀스 블록은
-            # 독립적인 기본 시간으로 시작하고 타임라인에서 따로 편집한다.
-            new_frame['time_ms'] = DEFAULT_SEQUENCE_FRAME_MS
-            
-            new_frame['start_ms'] = start_ms
-            self.parent_gui.motion_sequence.append(new_frame)
-            placed = self.parent_gui.reorder_motion_frame(
-                new_frame, int(start_ms * self.parent_gui.SCALE)
+        if self.parent_gui.composer_library_tabs.currentIndex() == 1:
+            item = self.parent_gui.composer_frame_list.currentItem()
+            if item is None:
+                return
+            self.parent_gui.add_frame_to_composer(
+                frame_id=item.data(Qt.UserRole),
+                drop_x=event.pos().x(),
             )
-            if not placed:
-                QMessageBox.warning(self, "공간 부족", "겹치지 않고 배치할 빈 공간이 없습니다.")
-                break
-            start_ms = new_frame['start_ms'] + new_frame['time_ms']
-
-        self.parent_gui.refresh_timeline_ui()
-        self.parent_gui.frame_list_all.clearSelection()
+        else:
+            item = self.parent_gui.composer_source_list.currentItem()
+            if item is None:
+                return
+            self.parent_gui.add_sequence_to_composer(
+                sequence_idx=item.data(Qt.UserRole),
+                drop_x=event.pos().x(),
+            )
         event.accept()
 
 
@@ -2308,6 +2392,7 @@ class SDKMotionEditor(QWidget):
                 "repeat_count": max(1, int(seq.get("repeat_count", 1))),
                 "playback_speed": max(0.1, min(5.0, float(seq.get("playback_speed", 1.0)))),
                 "repeatable": bool(seq.get("repeatable", True)),
+                "export_enabled": bool(seq.get("export_enabled", False)),
                 "completion": copy.deepcopy(seq.get("completion", {
                     "position_tolerance_deg": 2.0,
                     "settle_duration_ms": 80,
@@ -2418,6 +2503,7 @@ class SDKMotionEditor(QWidget):
                     "repeat_count": max(1, int(seq.get("repeat_count", 1))),
                     "playback_speed": max(0.1, min(5.0, float(seq.get("playback_speed", 1.0)))),
                     "repeatable": bool(seq.get("repeatable", True)),
+                    "export_enabled": bool(seq.get("export_enabled", False)),
                     "completion": copy.deepcopy(seq.get("completion", {
                         "position_tolerance_deg": 2.0,
                         "settle_duration_ms": 80,
@@ -2787,8 +2873,26 @@ class SDKMotionEditor(QWidget):
             self.on_frame_library_tab_changed
         )
 
+        self.frame_search_edit = QLineEdit()
+        self.frame_search_edit.setPlaceholderText(
+            "🔎 프레임 이름 검색 (예: 허들, 걷기, 왼들)"
+        )
+        self.frame_search_edit.setClearButtonEnabled(True)
+        self.frame_search_edit.setMinimumHeight(42)
+        self.frame_search_edit.setStyleSheet(
+            "QLineEdit { background: white; color: #212121; border: 2px solid #78909c; "
+            "border-radius: 6px; padding: 6px 10px; font-size: 13pt; }"
+            "QLineEdit:focus { border-color: #1976d2; }"
+        )
+        self.frame_search_edit.textChanged.connect(self.filter_frame_lists)
+        frame_library_widget = QWidget()
+        frame_library_layout = QVBoxLayout(frame_library_widget)
+        frame_library_layout.setContentsMargins(0, 0, 0, 0)
+        frame_library_layout.addWidget(self.frame_search_edit)
+        frame_library_layout.addWidget(self.frame_library_tabs)
+
         # 넓고 높은 목록을 왼쪽, 실행/저장 컨트롤을 오른쪽에 배치합니다.
-        frame_outer_layout.addWidget(self.frame_library_tabs, 3)
+        frame_outer_layout.addWidget(frame_library_widget, 3)
         frame_outer_layout.addWidget(frame_controls_widget, 1)
         frame_group.setLayout(frame_outer_layout)
         layout.addWidget(frame_group, 3)
@@ -2849,9 +2953,29 @@ class SDKMotionEditor(QWidget):
         )
         self.btn_delete_saved_sequence.clicked.connect(self.delete_selected_saved_sequence)
         sequence_layout.addWidget(self.btn_delete_saved_sequence)
+        self.btn_export_checked_motions = QPushButton(
+            "✅ 배포 체크한 모션만 최종 JSON 저장"
+        )
+        self.btn_export_checked_motions.setStyleSheet(
+            "background-color: #2e7d32; color: white; font-weight: bold; padding: 8px;"
+        )
+        self.btn_export_checked_motions.clicked.connect(
+            self.export_checked_motions_json
+        )
+        sequence_layout.addWidget(self.btn_export_checked_motions)
         
         all_layout = QVBoxLayout()
         self.lbl_all_frames = QLabel("📁 전체 프레임")
+        self.motion_frame_search_edit = QLineEdit()
+        self.motion_frame_search_edit.setPlaceholderText("🔎 타임라인에 넣을 프레임 이름 검색")
+        self.motion_frame_search_edit.setClearButtonEnabled(True)
+        self.motion_frame_search_edit.setMinimumHeight(38)
+        self.motion_frame_search_edit.setStyleSheet(
+            "QLineEdit { background: white; color: #212121; border: 2px solid #78909c; "
+            "border-radius: 6px; padding: 5px 9px; font-weight: bold; }"
+            "QLineEdit:focus { border-color: #1976d2; }"
+        )
+        self.motion_frame_search_edit.textChanged.connect(self.filter_frame_lists)
         self.btn_favorite_frames_only = QPushButton("☆ 즐겨찾기만 보기")
         self.btn_favorite_frames_only.setCheckable(True)
         self.btn_favorite_frames_only.setStyleSheet(
@@ -2871,6 +2995,7 @@ class SDKMotionEditor(QWidget):
         )
         
         all_layout.addWidget(self.lbl_all_frames)
+        all_layout.addWidget(self.motion_frame_search_edit)
         all_layout.addWidget(self.btn_favorite_frames_only)
         all_layout.addWidget(self.frame_list_all)
         self.btn_load_motion_library_frame = QPushButton(
@@ -3141,38 +3266,107 @@ class SDKMotionEditor(QWidget):
         # tab에는 outer_layout이 이미 생성자 인자로 설정되어 있습니다.
 
     def init_sequence_composer_tab(self, tab):
-        # 내부 프레임 이름과 시간이 보이도록 기본을 150%로 확대합니다.
+        # 2번 모션 제작 페이지와 같은 흐름으로 구성합니다.
+        # 저장 시퀀스 라이브러리 -> 현재 조합 순서 -> 실행/저장 -> 타임라인
         self.COMPOSER_SCALE = 1.5
         self.sequence_composer_entries = []
-        main_layout = QVBoxLayout(tab)
+        outer_layout = QVBoxLayout(tab)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        composer_page_scroll = QScrollArea()
+        composer_page_scroll.setWidgetResizable(True)
+        composer_page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        composer_page_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        composer_content = QWidget()
+        main_layout = QVBoxLayout(composer_content)
+        composer_page_scroll.setWidget(composer_content)
+        outer_layout.addWidget(composer_page_scroll)
+        self.composer_page_scroll = composer_page_scroll
 
-        title = QLabel("🧩 저장된 시퀀스를 이어붙여 새로운 시퀀스 만들기")
-        title.setStyleSheet("font-size: 16pt; font-weight: bold; padding: 8px;")
-        main_layout.addWidget(title)
+        library_group = QGroupBox("📚 시퀀스 라이브러리 (저장 시퀀스를 순서대로 이어붙이기)")
+        library_group.setStyleSheet("font-weight: bold; font-size: 13pt;")
+        library_layout = QHBoxLayout(library_group)
 
-        source_group = QGroupBox("저장된 시퀀스")
-        source_layout = QVBoxLayout(source_group)
+        source_layout = QVBoxLayout()
+        source_layout.addWidget(QLabel("🎞️ 조합할 소스 선택"))
+        self.composer_library_tabs = QTabWidget()
+        sequence_source_page = QWidget()
+        sequence_source_layout = QVBoxLayout(sequence_source_page)
+        sequence_source_layout.setContentsMargins(0, 0, 0, 0)
         self.composer_source_list = QListWidget()
+        self.composer_source_list.setMinimumHeight(300)
         self.composer_source_list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.composer_source_list.setDragEnabled(True)
         self.composer_source_list.itemDoubleClicked.connect(lambda _: self.add_sequence_to_composer())
-        source_layout.addWidget(self.composer_source_list)
+        sequence_source_layout.addWidget(self.composer_source_list)
 
-        add_button = QPushButton("선택 시퀀스 추가 ➡️")
-        add_button.setMinimumHeight(45)
-        add_button.setStyleSheet("background-color: #007bff; color: white; font-weight: bold;")
+        delete_source_button = QPushButton("🗑️ 선택 저장 시퀀스 삭제")
+        delete_source_button.setStyleSheet(
+            "background-color: #dc3545; color: white; font-weight: bold; padding: 8px;"
+        )
+        delete_source_button.clicked.connect(self.delete_composer_selected_sequence)
+        sequence_source_layout.addWidget(delete_source_button)
+
+        frame_source_page = QWidget()
+        frame_source_layout = QVBoxLayout(frame_source_page)
+        frame_source_layout.setContentsMargins(0, 0, 0, 0)
+        self.composer_frame_search = QLineEdit()
+        self.composer_frame_search.setPlaceholderText("🔎 조합할 프레임 이름 검색")
+        self.composer_frame_search.setClearButtonEnabled(True)
+        self.composer_frame_search.setMinimumHeight(38)
+        self.composer_frame_search.textChanged.connect(self.refresh_composer_frame_list)
+        self.composer_frame_list = QListWidget()
+        self.composer_frame_list.setMinimumHeight(260)
+        self.composer_frame_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.composer_frame_list.setDragEnabled(True)
+        self.composer_frame_list.itemDoubleClicked.connect(
+            lambda _item: self.add_frame_to_composer()
+        )
+        frame_source_layout.addWidget(self.composer_frame_search)
+        frame_source_layout.addWidget(self.composer_frame_list)
+
+        self.composer_library_tabs.addTab(sequence_source_page, "저장 시퀀스")
+        self.composer_library_tabs.addTab(frame_source_page, "단일 프레임")
+        source_layout.addWidget(self.composer_library_tabs)
+
+        add_layout = QVBoxLayout()
+        add_layout.setAlignment(Qt.AlignCenter)
+        add_button = QPushButton("선택 항목\n조합에 추가 ➡️")
+        add_button.setMinimumSize(105, 75)
+        add_button.setStyleSheet(
+            "background-color: #007bff; color: white; font-weight: bold; font-size: 13pt;"
+        )
         # QPushButton.clicked가 전달하는 checked(bool)를 시퀀스 인덱스로
         # 오인하면 False == 0이 되어 항상 첫 번째 '기본'만 추가됩니다.
         add_button.clicked.connect(
-            lambda _checked=False: self.add_sequence_to_composer()
+            lambda _checked=False: self.add_selected_composer_source()
         )
-        source_layout.addWidget(add_button)
-        delete_source_button = QPushButton("🗑️ 선택 시퀀스 삭제")
-        delete_source_button.setStyleSheet(
-            "background-color: #dc3545; color: white; font-weight: bold;"
+        add_layout.addWidget(add_button)
+
+        result_layout = QVBoxLayout()
+        result_layout.addWidget(QLabel("🧩 현재 조합 순서"))
+        self.composer_order_list = QListWidget()
+        self.composer_order_list.setMinimumHeight(300)
+        self.composer_order_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.composer_order_list.itemDoubleClicked.connect(
+            lambda _item: self.remove_selected_composer_entry()
         )
-        delete_source_button.clicked.connect(self.delete_composer_selected_sequence)
-        source_layout.addWidget(delete_source_button)
+        result_layout.addWidget(self.composer_order_list)
+        order_buttons = QHBoxLayout()
+        move_up_button = QPushButton("⬆️ 위로")
+        move_down_button = QPushButton("⬇️ 아래로")
+        remove_button = QPushButton("🗑️ 조합에서 빼기")
+        move_up_button.clicked.connect(lambda: self.move_selected_composer_entry(-1))
+        move_down_button.clicked.connect(lambda: self.move_selected_composer_entry(1))
+        remove_button.clicked.connect(self.remove_selected_composer_entry)
+        for button in (move_up_button, move_down_button, remove_button):
+            button.setMinimumHeight(38)
+            order_buttons.addWidget(button)
+        result_layout.addLayout(order_buttons)
+
+        library_layout.addLayout(source_layout, 5)
+        library_layout.addLayout(add_layout, 1)
+        library_layout.addLayout(result_layout, 5)
+        main_layout.addWidget(library_group, 5)
 
         chain_group = QGroupBox("시퀀스 타임라인 (블록 드래그로 순서 변경 / 저장 시퀀스 끌어놓기)")
         chain_layout = QVBoxLayout(chain_group)
@@ -3187,21 +3381,24 @@ class SDKMotionEditor(QWidget):
         self.spin_composer_zoom.setSingleStep(25)
         self.spin_composer_zoom.setValue(150)
         self.spin_composer_zoom.setSuffix(" %")
-        self.spin_composer_zoom.valueChanged.connect(self.apply_composer_timeline_zoom)
+        self.btn_apply_composer_zoom = QPushButton("확대 적용")
+        self.btn_apply_composer_zoom.setStyleSheet(
+            "background-color: #6f42c1; color: white; font-weight: bold;"
+        )
+        self.btn_apply_composer_zoom.clicked.connect(self.apply_composer_timeline_zoom)
         composer_tools.addWidget(self.lbl_composer_meta)
         composer_tools.addStretch()
         composer_tools.addWidget(composer_zoom_label)
         composer_tools.addWidget(self.spin_composer_zoom)
+        composer_tools.addWidget(self.btn_apply_composer_zoom)
         chain_layout.addLayout(composer_tools)
         self.composer_timeline_scroll = QScrollArea()
         self.composer_timeline_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.composer_timeline_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.composer_timeline_scroll.setMinimumHeight(235)
+        self.composer_timeline_scroll.setMinimumHeight(285)
         self.composer_timeline_container = SequenceTimelineContainer(self)
         self.composer_timeline_scroll.setWidget(self.composer_timeline_container)
         chain_layout.addWidget(self.composer_timeline_scroll)
-        main_layout.addWidget(source_group, 2)
-
         composer_ctrl_group = QGroupBox("⚙️ 시퀀스 컨트롤 패널")
         composer_ctrl_group.setStyleSheet("font-weight: bold; font-size: 13pt;")
         controls = QHBoxLayout(composer_ctrl_group)
@@ -3273,16 +3470,128 @@ class SDKMotionEditor(QWidget):
             )
             item.setData(Qt.UserRole, idx)
             self.composer_source_list.addItem(item)
+        self.refresh_composer_frame_list()
         if hasattr(self, 'sequence_composer_entries'):
             for entry in self.sequence_composer_entries:
-                idx = entry['sequence_idx']
+                if entry.get('kind', 'sequence') == 'frame':
+                    source = next(
+                        (
+                            frame for frame in self.frames
+                            if frame.get('frame_id') == entry.get('frame_id')
+                        ),
+                        None,
+                    )
+                    if source is not None:
+                        source_copy = copy.deepcopy(source)
+                        duration = max(
+                            MIN_TIMELINE_FRAME_MS,
+                            int(entry.get(
+                                'base_duration_ms',
+                                source_copy.get('time_ms', MIN_TIMELINE_FRAME_MS),
+                            )),
+                        )
+                        source_copy['start_ms'] = 0
+                        source_copy['time_ms'] = duration
+                        entry.update({
+                            'source_frame': source_copy,
+                            'name': str(source_copy.get('name', 'Frame')),
+                            'base_duration_ms': duration,
+                        })
+                        self.rebuild_composer_entry(entry)
+                    continue
+                idx = entry.get('sequence_idx', -1)
                 if 0 <= idx < len(self.saved_sequences):
                     sequence = self.saved_sequences[idx]
                     entry['name'] = sequence['name']
-                    entry['time_ms'] = self.sequence_duration(idx)
-                    entry['frame_count'] = len(sequence.get('frames', []))
-                    entry['leading_wait_ms'] = self.sequence_leading_wait(idx)
-                    entry['frames'] = self.sequence_frame_summaries(idx)
+                    entry.setdefault(
+                        'repeat_count',
+                        max(1, int(sequence.get('repeat_count', 1))),
+                    )
+                    entry.setdefault(
+                        'playback_speed',
+                        max(0.1, float(sequence.get('playback_speed', 1.0))),
+                    )
+                    entry.setdefault('gap_before_ms', 0)
+                    self.rebuild_composer_entry(entry)
+            self.pack_sequence_composer_entries()
+            self.refresh_sequence_composer_timeline()
+
+    def refresh_composer_frame_list(self, *_args):
+        if not hasattr(self, 'composer_frame_list'):
+            return
+        selected_id = None
+        selected = self.composer_frame_list.currentItem()
+        if selected is not None:
+            selected_id = selected.data(Qt.UserRole)
+        query = (
+            self.composer_frame_search.text().strip().casefold()
+            if hasattr(self, 'composer_frame_search')
+            else ""
+        )
+        self.composer_frame_list.clear()
+        restore_row = -1
+        for frame in self.frames:
+            name = str(frame.get('name', 'Frame'))
+            if query and query not in name.casefold():
+                continue
+            frame_id = frame.get('frame_id')
+            favorite_prefix = "★ " if frame.get('is_important', False) else ""
+            item = QListWidgetItem(
+                f"{favorite_prefix}[{name}] "
+                f"{max(MIN_TIMELINE_FRAME_MS, int(frame.get('time_ms', 0)))}ms"
+            )
+            item.setData(Qt.UserRole, frame_id)
+            self.composer_frame_list.addItem(item)
+            if frame_id == selected_id:
+                restore_row = self.composer_frame_list.count() - 1
+        if restore_row >= 0:
+            self.composer_frame_list.setCurrentRow(restore_row)
+
+    def add_selected_composer_source(self):
+        if self.composer_library_tabs.currentIndex() == 1:
+            return self.add_frame_to_composer()
+        return self.add_sequence_to_composer()
+
+    def add_frame_to_composer(self, frame_id=None, drop_x=None):
+        """단일 저장 프레임을 시퀀스 블록 사이에 독립 항목으로 넣습니다."""
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        if isinstance(frame_id, bool):
+            frame_id = None
+        if frame_id is None:
+            item = self.composer_frame_list.currentItem()
+            if item is None:
+                return QMessageBox.warning(self, "경고", "추가할 단일 프레임을 선택하세요.")
+            frame_id = item.data(Qt.UserRole)
+        source_frame = next(
+            (frame for frame in self.frames if frame.get('frame_id') == frame_id),
+            None,
+        )
+        if source_frame is None:
+            return QMessageBox.warning(self, "경고", "선택한 프레임을 찾을 수 없습니다.")
+        frame_copy = copy.deepcopy(source_frame)
+        duration = max(
+            MIN_TIMELINE_FRAME_MS,
+            int(frame_copy.get('time_ms', MIN_TIMELINE_FRAME_MS)),
+        )
+        frame_copy['time_ms'] = duration
+        frame_copy['start_ms'] = 0
+        entry = {
+            "kind": "frame",
+            "frame_id": frame_id,
+            "source_frame": frame_copy,
+            "name": str(frame_copy.get('name', 'Frame')),
+            "base_duration_ms": duration,
+            "repeat_count": 1,
+            "playback_speed": 1.0,
+            "gap_before_ms": 0,
+            "start_ms": self.composer_total_duration(),
+        }
+        self.rebuild_composer_entry(entry)
+        self.sequence_composer_entries.append(entry)
+        if drop_x is not None:
+            self.reorder_sequence_composer_entry(entry, drop_x)
+        else:
             self.pack_sequence_composer_entries()
             self.refresh_sequence_composer_timeline()
 
@@ -3321,6 +3630,79 @@ class SDKMotionEditor(QWidget):
             for frame in sorted(frames, key=lambda item: item.get("start_ms", 0))
         ]
 
+    def rebuild_composer_entry(self, entry):
+        """반복·배속·앞 대기를 포함한 조합 블록의 실제 시간을 계산합니다."""
+        repeat_count = max(1, int(entry.get('repeat_count', 1)))
+        speed = max(0.1, float(entry.get('playback_speed', 1.0)))
+        gap_before_ms = max(0, int(entry.get('gap_before_ms', 0)))
+        entry['repeat_count'] = repeat_count
+        entry['playback_speed'] = speed
+        entry['gap_before_ms'] = gap_before_ms
+
+        if entry.get('kind') == 'frame':
+            base_duration = max(
+                MIN_TIMELINE_FRAME_MS,
+                int(entry.get('base_duration_ms', entry.get('time_ms', 0))),
+            )
+            entry['base_duration_ms'] = base_duration
+            summaries = []
+            cursor = gap_before_ms
+            for repetition in range(repeat_count):
+                summaries.append({
+                    'name': (
+                        f"{entry.get('name', 'Frame')} ({repetition + 1}/{repeat_count})"
+                        if repeat_count > 1 else entry.get('name', 'Frame')
+                    ),
+                    'start_ms': cursor,
+                    'time_ms': base_duration,
+                })
+                cursor += base_duration
+            entry['frames'] = summaries
+            entry['frame_count'] = repeat_count
+            entry['leading_wait_ms'] = gap_before_ms
+            entry['time_ms'] = cursor
+            return
+
+        sequence_idx = entry.get('sequence_idx', -1)
+        if not (0 <= sequence_idx < len(self.saved_sequences)):
+            entry.update(time_ms=gap_before_ms, frame_count=0, frames=[])
+            return
+        source_summaries = self.sequence_frame_summaries(sequence_idx)
+        source_duration = self.sequence_duration(sequence_idx)
+        scaled_duration = max(
+            (
+                int(round(frame['start_ms'] / speed))
+                + max(
+                    MIN_TIMELINE_FRAME_MS,
+                    int(round(frame['time_ms'] / speed)),
+                )
+                for frame in source_summaries
+            ),
+            default=max(MIN_TIMELINE_FRAME_MS, int(round(source_duration / speed))),
+        )
+        summaries = []
+        for repetition in range(repeat_count):
+            repetition_start = gap_before_ms + repetition * scaled_duration
+            for frame in source_summaries:
+                summaries.append({
+                    'name': (
+                        f"{frame['name']} ({repetition + 1}/{repeat_count})"
+                        if repeat_count > 1 else frame['name']
+                    ),
+                    'start_ms': repetition_start + int(round(frame['start_ms'] / speed)),
+                    'time_ms': max(
+                        MIN_TIMELINE_FRAME_MS,
+                        int(round(frame['time_ms'] / speed)),
+                    ),
+                })
+        entry['base_duration_ms'] = source_duration
+        entry['frames'] = summaries
+        entry['frame_count'] = len(summaries)
+        entry['leading_wait_ms'] = (
+            gap_before_ms + int(round(self.sequence_leading_wait(sequence_idx) / speed))
+        )
+        entry['time_ms'] = gap_before_ms + repeat_count * scaled_duration
+
     def add_sequence_to_composer(self, sequence_idx=None, drop_x=None):
         if self.playback_context == "composer":
             self.stop_motion_sequence()
@@ -3336,14 +3718,16 @@ class SDKMotionEditor(QWidget):
         sequence = self.saved_sequences[sequence_idx]
         duration = self.sequence_duration(sequence_idx)
         entry = {
+            "kind": "sequence",
             "sequence_idx": sequence_idx,
             "name": sequence['name'],
-            "time_ms": duration,
-            "frame_count": len(sequence.get('frames', [])),
-            "leading_wait_ms": self.sequence_leading_wait(sequence_idx),
-            "frames": self.sequence_frame_summaries(sequence_idx),
+            "base_duration_ms": duration,
+            "repeat_count": max(1, int(sequence.get('repeat_count', 1))),
+            "playback_speed": max(0.1, float(sequence.get('playback_speed', 1.0))),
+            "gap_before_ms": 0,
             "start_ms": self.composer_total_duration(),
         }
+        self.rebuild_composer_entry(entry)
         self.sequence_composer_entries.append(entry)
         if drop_x is not None:
             self.reorder_sequence_composer_entry(entry, drop_x)
@@ -3359,6 +3743,77 @@ class SDKMotionEditor(QWidget):
             self.pack_sequence_composer_entries()
             self.refresh_sequence_composer_timeline()
 
+    def remove_selected_composer_entry(self):
+        """오른쪽 '현재 조합 순서'에서 고른 블록만 제거합니다."""
+        if not hasattr(self, 'composer_order_list'):
+            return
+        row = self.composer_order_list.currentRow()
+        if row < 0:
+            return QMessageBox.warning(self, "경고", "조합에서 뺄 시퀀스를 선택하세요.")
+        self.remove_sequence_composer_entry(row)
+
+    def move_selected_composer_entry(self, direction):
+        """현재 조합 블록을 한 칸 위/아래로 이동합니다."""
+        if not hasattr(self, 'composer_order_list'):
+            return
+        row = self.composer_order_list.currentRow()
+        target = row + int(direction)
+        if row < 0:
+            return QMessageBox.warning(self, "경고", "순서를 바꿀 시퀀스를 선택하세요.")
+        if target < 0 or target >= len(self.sequence_composer_entries):
+            return
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        entry = self.sequence_composer_entries.pop(row)
+        self.sequence_composer_entries.insert(target, entry)
+        self.pack_sequence_composer_entries()
+        self.refresh_sequence_composer_timeline()
+        self.composer_order_list.setCurrentRow(target)
+
+    def set_composer_frame_duration(self, entry, duration_ms):
+        """조합에 넣은 단일 프레임의 시간만 변경합니다."""
+        if entry not in self.sequence_composer_entries or entry.get('kind') != 'frame':
+            return
+        duration_ms = max(MIN_TIMELINE_FRAME_MS, int(duration_ms))
+        if int(entry.get('base_duration_ms', 0)) == duration_ms:
+            return
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        entry['base_duration_ms'] = duration_ms
+        entry['source_frame']['time_ms'] = duration_ms
+        self.rebuild_composer_entry(entry)
+        self.pack_sequence_composer_entries()
+        # 스핀박스를 편집하는 중에 블록 자체를 재생성하지 않고
+        # 크기/순서 표시만 다음 이벤트 루프에서 갱신합니다.
+        QTimer.singleShot(0, self.refresh_sequence_composer_timeline)
+
+    def set_composer_entry_repeat(self, entry, repeat_count):
+        if entry not in self.sequence_composer_entries:
+            return
+        repeat_count = max(1, int(repeat_count))
+        if int(entry.get('repeat_count', 1)) == repeat_count:
+            return
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        entry['repeat_count'] = repeat_count
+        self.rebuild_composer_entry(entry)
+        self.pack_sequence_composer_entries()
+        QTimer.singleShot(0, self.refresh_sequence_composer_timeline)
+
+    def set_composer_entry_gap(self, entry, gap_before_ms):
+        """해당 시퀀스/프레임을 시작하기 전 직전 자세를 유지합니다."""
+        if entry not in self.sequence_composer_entries:
+            return
+        gap_before_ms = max(0, int(gap_before_ms))
+        if int(entry.get('gap_before_ms', 0)) == gap_before_ms:
+            return
+        if self.playback_context == "composer":
+            self.stop_motion_sequence()
+        entry['gap_before_ms'] = gap_before_ms
+        self.rebuild_composer_entry(entry)
+        self.pack_sequence_composer_entries()
+        QTimer.singleShot(0, self.refresh_sequence_composer_timeline)
+
     def clear_sequence_composer(self):
         if self.playback_context == "composer":
             self.stop_motion_sequence()
@@ -3366,7 +3821,10 @@ class SDKMotionEditor(QWidget):
         self.refresh_sequence_composer_timeline()
 
     def composer_sequence_indices(self):
-        return [entry['sequence_idx'] for entry in self.sequence_composer_entries]
+        return [
+            entry['sequence_idx'] for entry in self.sequence_composer_entries
+            if entry.get('kind', 'sequence') == 'sequence'
+        ]
 
     def composer_total_duration(self):
         return sum(entry['time_ms'] for entry in self.sequence_composer_entries)
@@ -3398,6 +3856,31 @@ class SDKMotionEditor(QWidget):
     def refresh_sequence_composer_timeline(self):
         if not hasattr(self, 'composer_timeline_container'):
             return
+        selected_row = -1
+        if hasattr(self, 'composer_order_list'):
+            selected_row = self.composer_order_list.currentRow()
+            self.composer_order_list.clear()
+            for index, entry in enumerate(self.sequence_composer_entries):
+                leading_wait = int(entry.get('leading_wait_ms', 0))
+                gap_before = int(entry.get('gap_before_ms', 0))
+                wait_text = f" / 앞 대기 {gap_before}ms" if gap_before else ""
+                type_text = "프레임" if entry.get('kind') == 'frame' else "시퀀스"
+                item = QListWidgetItem(
+                    f"[{index + 1}] [{type_text}] {entry['name']}  |  "
+                    f"{entry.get('repeat_count', 1)}회 / "
+                    f"{entry['frame_count']} 실행 프레임 / "
+                    f"{entry['time_ms']}ms{wait_text}"
+                )
+                item.setData(Qt.UserRole, index)
+                item.setToolTip(
+                    f"{index + 1}번째로 실행: {entry['name']}\n"
+                    f"전체 {entry['time_ms']}ms, {entry['frame_count']}개 프레임"
+                )
+                self.composer_order_list.addItem(item)
+            if self.sequence_composer_entries and selected_row >= 0:
+                self.composer_order_list.setCurrentRow(
+                    min(selected_row, len(self.sequence_composer_entries) - 1)
+                )
         for child in self.composer_timeline_container.findChildren(SequenceTimelineBlockWidget):
             child.setParent(None)
             child.deleteLater()
@@ -3406,10 +3889,10 @@ class SDKMotionEditor(QWidget):
             block.setParent(self.composer_timeline_container)
             x = int(entry['start_ms'] * self.COMPOSER_SCALE)
             width = max(1, int(entry['time_ms'] * self.COMPOSER_SCALE))
-            block.setGeometry(x, 40, width, 145)
+            block.setGeometry(x, 40, width, 180)
             block.show()
         self.composer_timeline_container.setMinimumSize(
-            self.composer_timeline_width(), 205
+            self.composer_timeline_width(), 240
         )
         self.composer_timeline_container.update()
         self.refresh_composer_meta()
@@ -3417,7 +3900,35 @@ class SDKMotionEditor(QWidget):
     def build_composed_sequence_frames(self):
         combined_frames = []
         current_start = 0
-        for sequence_idx in self.composer_sequence_indices():
+        for entry in self.sequence_composer_entries:
+            gap_before_ms = max(0, int(entry.get('gap_before_ms', 0)))
+            repeat_count = max(1, int(entry.get('repeat_count', 1)))
+            speed = max(0.1, float(entry.get('playback_speed', 1.0)))
+            # 조합 항목 앞 대기는 직전 항목의 마지막 자세를
+            # 유지하는 빈 타임라인 구간으로 남겨 둡니다.
+            current_start += gap_before_ms
+            if entry.get('kind') == 'frame':
+                source_frame = copy.deepcopy(entry.get('source_frame', {}))
+                if not source_frame:
+                    continue
+                frame_duration = max(
+                    MIN_TIMELINE_FRAME_MS,
+                    int(entry.get(
+                        'base_duration_ms',
+                        source_frame.get('time_ms', entry.get('time_ms', 0)),
+                    )),
+                )
+                for _repetition in range(repeat_count):
+                    repeated_frame = copy.deepcopy(source_frame)
+                    repeated_frame['start_ms'] = current_start
+                    repeated_frame['time_ms'] = frame_duration
+                    combined_frames.append(repeated_frame)
+                    current_start += frame_duration
+                continue
+
+            sequence_idx = entry.get('sequence_idx', -1)
+            if not (0 <= sequence_idx < len(self.saved_sequences)):
+                continue
             source_frames = self.saved_sequences[sequence_idx].get('frames', [])
             if not source_frames:
                 continue
@@ -3426,16 +3937,39 @@ class SDKMotionEditor(QWidget):
                 frame.get('start_ms', 0) + max(MIN_TIMELINE_FRAME_MS, frame.get('time_ms', 0))
                 for frame in ordered
             )
-            for source_frame in ordered:
-                new_frame = copy.deepcopy(source_frame)
-                new_frame['time_ms'] = max(MIN_TIMELINE_FRAME_MS, new_frame['time_ms'])
-                # 각 원본 시퀀스의 0ms 기준을 그대로 붙여 맨 앞 대기와
-                # 내부 프레임 사이 대기시간을 모두 보존합니다.
-                new_frame['start_ms'] = (
-                    current_start + max(0, source_frame.get('start_ms', 0))
-                )
-                combined_frames.append(new_frame)
-            current_start += source_end
+            scaled_source_end = max(
+                (
+                    int(round(max(0, frame.get('start_ms', 0)) / speed))
+                    + max(
+                        MIN_TIMELINE_FRAME_MS,
+                        int(round(
+                            max(MIN_TIMELINE_FRAME_MS, frame.get('time_ms', 0))
+                            / speed
+                        )),
+                    )
+                    for frame in ordered
+                ),
+                default=max(MIN_TIMELINE_FRAME_MS, int(round(source_end / speed))),
+            )
+            for _repetition in range(repeat_count):
+                repetition_start = current_start
+                for source_frame in ordered:
+                    new_frame = copy.deepcopy(source_frame)
+                    new_frame['time_ms'] = max(
+                        MIN_TIMELINE_FRAME_MS,
+                        int(round(
+                            max(MIN_TIMELINE_FRAME_MS, source_frame.get('time_ms', 0))
+                            / speed
+                        )),
+                    )
+                    # 원본의 맨 앞/내부 대기도 배속에 맞게 보존하고,
+                    # 저장된 repeat_count만큼 전체 시퀀스를 펼쳐 넣습니다.
+                    new_frame['start_ms'] = (
+                        repetition_start
+                        + int(round(max(0, source_frame.get('start_ms', 0)) / speed))
+                    )
+                    combined_frames.append(new_frame)
+                current_start += scaled_source_end
         return combined_frames, current_start
 
     def refresh_composer_meta(self, *args):
@@ -3443,7 +3977,8 @@ class SDKMotionEditor(QWidget):
             return
         frames, duration = self.build_composed_sequence_frames()
         self.lbl_composer_meta.setText(
-            f"구성: {len(self.sequence_composer_entries)}개 시퀀스 / {len(frames)}개 프레임 / {duration}ms"
+            f"구성: {len(self.sequence_composer_entries)}개 조합 항목 / "
+            f"{len(frames)}개 실행 프레임 / {duration}ms"
         )
 
     def save_composed_sequence(self):
@@ -4055,6 +4590,24 @@ class SDKMotionEditor(QWidget):
         idx = item.data(Qt.UserRole)
         if idx is not None:
             self.load_saved_sequence(idx)
+
+    def play_saved_sequence_direct(self, sequence_idx):
+        """저장 시퀀스를 별도 불러오기 버튼 없이 한 번에 재생합니다."""
+        if sequence_idx is None or not (0 <= sequence_idx < len(self.saved_sequences)):
+            return
+        if self.is_playing or self.is_paused:
+            reply = QMessageBox.question(
+                self,
+                "재생 전환 확인",
+                "현재 재생을 안전하게 멈추고 선택한 시퀀스를 바로 재생하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+            self.stop_motion_sequence()
+        self.load_saved_sequence(sequence_idx)
+        self.play_motion_page_sequence()
 
     def open_sequence_manager(self):
         if hasattr(self, 'sequence_list_ui') and self.sequence_list_ui.currentItem():
@@ -6202,7 +6755,10 @@ class SDKMotionEditor(QWidget):
 
         remaining_entries = []
         for entry in self.sequence_composer_entries:
-            entry_idx = entry['sequence_idx']
+            if entry.get('kind', 'sequence') != 'sequence':
+                remaining_entries.append(entry)
+                continue
+            entry_idx = entry.get('sequence_idx', -1)
             if entry_idx == sequence_idx:
                 continue
             if entry_idx > sequence_idx:
@@ -6220,13 +6776,83 @@ class SDKMotionEditor(QWidget):
             return
         self.sequence_list_ui.clear()
         for idx, seq in enumerate(self.saved_sequences):
-            item = QListWidgetItem(
-                f"[{idx+1}] {seq['name']} ({len(seq['frames'])} 프레임 / "
-                f"{seq.get('repeat_count', 1)}회 / {seq.get('playback_speed', 1.0):.2f}x)"
-            )
+            item = QListWidgetItem(self.sequence_list_ui)
             item.setData(Qt.UserRole, idx)
-            self.sequence_list_ui.addItem(item)
+            row_widget = SequenceItemWidget(seq, idx, self)
+            item.setSizeHint(row_widget.sizeHint())
+            self.sequence_list_ui.setItemWidget(item, row_widget)
         self.refresh_composer_source_list()
+
+    def set_sequence_export_enabled(self, sequence_idx, checked):
+        """삭제하지 않고 최종 배포 JSON 포함 여부만 저장합니다."""
+        if sequence_idx is None or not (0 <= sequence_idx < len(self.saved_sequences)):
+            return
+        self.saved_sequences[sequence_idx]["export_enabled"] = bool(checked)
+        self.save_persistent_state()
+
+    @staticmethod
+    def normalized_search_text(text):
+        """대소문자와 띄어쓰기 차이를 무시한 프레임 검색 문자열입니다."""
+        return "".join(str(text or "").casefold().split())
+
+    def filter_frame_lists(self, unused_text=None):
+        """단일 프레임/모션 제작 목록을 이름 검색어에 맞춰 즉시 필터링합니다."""
+        editor_query = self.normalized_search_text(
+            self.frame_search_edit.text()
+            if hasattr(self, "frame_search_edit") else ""
+        )
+        if hasattr(self, "frame_list_ui1"):
+            for row in range(self.frame_list_ui1.count()):
+                frame = self.frames[row] if row < len(self.frames) else {}
+                searchable = self.normalized_search_text(frame.get("name", ""))
+                self.frame_list_ui1.item(row).setHidden(
+                    bool(editor_query) and editor_query not in searchable
+                )
+
+        if hasattr(self, "frame_favorites_ui"):
+            for row in range(self.frame_favorites_ui.count()):
+                item = self.frame_favorites_ui.item(row)
+                frame_idx = item.data(Qt.UserRole)
+                frame = (
+                    self.frames[frame_idx]
+                    if isinstance(frame_idx, int) and 0 <= frame_idx < len(self.frames)
+                    else {}
+                )
+                searchable = self.normalized_search_text(frame.get("name", ""))
+                item.setHidden(bool(editor_query) and editor_query not in searchable)
+
+        motion_query = self.normalized_search_text(
+            self.motion_frame_search_edit.text()
+            if hasattr(self, "motion_frame_search_edit") else ""
+        )
+        visible_count = 0
+        if hasattr(self, "frame_list_all"):
+            for row in range(self.frame_list_all.count()):
+                item = self.frame_list_all.item(row)
+                frame_idx = item.data(Qt.UserRole)
+                frame = (
+                    self.frames[frame_idx]
+                    if isinstance(frame_idx, int) and 0 <= frame_idx < len(self.frames)
+                    else {}
+                )
+                searchable = self.normalized_search_text(frame.get("name", ""))
+                hidden = bool(motion_query) and motion_query not in searchable
+                item.setHidden(hidden)
+                if not hidden:
+                    visible_count += 1
+
+        if hasattr(self, "lbl_all_frames"):
+            favorite_count = sum(
+                bool(frame.get("is_important", False)) for frame in self.frames
+            )
+            visible_name = (
+                "즐겨찾기 프레임"
+                if self.show_favorite_frames_only else "전체 프레임"
+            )
+            self.lbl_all_frames.setText(
+                f"📁 {visible_name} "
+                f"({visible_count}개 검색 결과 / ★ {favorite_count}개)"
+            )
 
     def refresh_library_lists(self):
         # 1번 탭의 편집 목록과 2번 탭의 전체 프레임 목록은 같은
@@ -6306,6 +6932,7 @@ class SDKMotionEditor(QWidget):
                 f"📁 {visible_name} "
                 f"({self.frame_list_all.count()}개 표시 / ★ {favorite_count}개)"
             )
+        self.filter_frame_lists()
         self.refresh_sequence_list()
         self.save_persistent_state()
         self.save_persistent_state()
@@ -6329,18 +6956,43 @@ class SDKMotionEditor(QWidget):
         if not self.saved_sequences:
             return QMessageBox.warning(self, "저장 불가", "저장된 시퀀스가 없습니다.")
 
-        names = [str(sequence.get("name", "")).strip() for sequence in self.saved_sequences]
+        self.export_motion_collection(
+            self.saved_sequences,
+            "전체 모션 JSON 저장",
+            "robot_motions_all.json",
+        )
+
+    def export_checked_motions_json(self):
+        selected_sequences = [
+            sequence for sequence in self.saved_sequences
+            if sequence.get("export_enabled", False)
+        ]
+        if not selected_sequences:
+            return QMessageBox.warning(
+                self,
+                "배포 모션 없음",
+                "저장된 시퀀스 목록에서 최종 배포에 포함할 모션을 체크하세요.",
+            )
+        self.export_motion_collection(
+            selected_sequences,
+            "배포 체크 모션 JSON 저장",
+            "robot_motions.json",
+        )
+
+    def export_motion_collection(self, sequences, dialog_title, default_name):
+        """전달받은 시퀀스만 RobotMotionPlayer용 JSON으로 저장합니다."""
+        names = [str(sequence.get("name", "")).strip() for sequence in sequences]
         normalized_names = [name.casefold() for name in names]
         if any(not name for name in names) or len(set(normalized_names)) != len(names):
             return QMessageBox.warning(
                 self, "저장 불가", "빈 이름 또는 중복 이름의 시퀀스가 있습니다."
             )
 
-        for sequence in self.saved_sequences:
+        for sequence in sequences:
             self.repair_legacy_sequence_timing(sequence.get("frames", []))
 
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "전체 모션 JSON 저장", "robot_motions.json", "JSON Files (*.json)"
+            self, dialog_title, default_name, "JSON Files (*.json)"
         )
         if not file_name:
             return
@@ -6368,7 +7020,7 @@ class SDKMotionEditor(QWidget):
                     },
                     "frames": sequence.get("frames", []),
                 }
-                for name, sequence in zip(names, self.saved_sequences)
+                for name, sequence in zip(names, sequences)
             ],
         }
         try:
@@ -6377,7 +7029,7 @@ class SDKMotionEditor(QWidget):
         except (OSError, TypeError, ValueError) as exc:
             return QMessageBox.warning(self, "저장 실패", str(exc))
         QMessageBox.information(
-            self, "저장 완료", f"시퀀스 {len(self.saved_sequences)}개를 내보냈습니다."
+            self, "저장 완료", f"시퀀스 {len(sequences)}개를 내보냈습니다."
         )
 
 if __name__ == '__main__':
