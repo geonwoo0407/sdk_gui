@@ -1,0 +1,92 @@
+[
+  {
+    "name": "forward_integer_event",
+    "legacy": {
+      "action": "STRAIGHT",
+      "valid": true,
+      "command_id": 101,
+      "event_id": 201
+    },
+    "request": {
+      "action": "STRAIGHT",
+      "command_id": 101,
+      "event_id": 201,
+      "request_id": 1,
+      "motion_id": "forward",
+      "timeout_ms": 5000
+    },
+    "expected_error_code": "HARDWARE_NOT_READY"
+  },
+  {
+    "name": "forward_short_null_event",
+    "legacy": {
+      "action": "SLOW_APPROACH",
+      "valid": true,
+      "command_id": 102,
+      "event_id": null
+    },
+    "request": {
+      "action": "SLOW_APPROACH",
+      "command_id": 102,
+      "event_id": null,
+      "request_id": 2,
+      "motion_id": "forward_short",
+      "timeout_ms": 5000
+    },
+    "expected_error_code": "INVALID_MOTION"
+  },
+  {
+    "name": "unsupported_turn_left",
+    "legacy": {
+      "action": "TURN_LEFT",
+      "valid": true,
+      "command_id": 103,
+      "event_id": 203
+    },
+    "request": {
+      "action": "TURN_LEFT",
+      "command_id": 103,
+      "event_id": 203,
+      "request_id": 3,
+      "motion_id": "turn_left",
+      "timeout_ms": 5000
+    },
+    "expected_error_code": "INVALID_MOTION"
+  },
+  {
+    "name": "unsupported_shoot",
+    "legacy": {
+      "action": "SHOT",
+      "valid": true,
+      "command_id": 104,
+      "event_id": null
+    },
+    "request": {
+      "action": "SHOT",
+      "command_id": 104,
+      "event_id": null,
+      "request_id": 4,
+      "motion_id": "shoot",
+      "timeout_ms": 10000
+    },
+    "expected_error_code": "INVALID_MOTION"
+  },
+  {
+    "name": "legacy_hurdle_alias_is_catalogued",
+    "legacy": {
+      "action": "CROSS_FINISH",
+      "valid": true,
+      "command_id": 105,
+      "event_id": 205
+    },
+    "request": {
+      "action": "CROSS_FINISH",
+      "command_id": 105,
+      "event_id": 205,
+      "request_id": 5,
+      "motion_id": "hurdle",
+      "timeout_ms": 12000
+    },
+    "expected_error_code": "HARDWARE_NOT_READY"
+  }
+]

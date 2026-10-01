@@ -83,24 +83,13 @@ StartResult RobotMotionPlayer::start(std::string_view motion_name) noexcept {
         return StartResult::MotionNotFound;
     }
     try {
-        pattern_ = &library_.motion(name);
-        if (pattern_->frames().empty()) {
+        const auto& pattern = library_.motion(name);
+        if (pattern.frames().empty()) {
             last_error_ = "motion has no frames: " + name;
             return StartResult::InvalidMotion;
         }
-        current_motion_ = name;
-        next_frame_ = 0;
-        repeat_ = 1;
-        final_goal_deg_.clear();
-        final_goal_ids_.clear();
-        gated_goal_deg_.clear();
-        gated_goal_ids_.clear();
-        gated_frame_ = nullptr;
-        frame_gate_wait_started_at_ = Clock::time_point{};
-        frame_gate_last_check_at_ = Clock::time_point{};
-        within_tolerance_ = false;
-        started_at_ = Clock::now();
-        status_ = MotionStatus::Running;
+        clearQueuedMotion();
+        resetMotionRuntime(pattern, name, Clock::now());
         error_ = MotionError::None;
         last_error_.clear();
         return StartResult::Accepted;
@@ -111,6 +100,96 @@ StartResult RobotMotionPlayer::start(std::string_view motion_name) noexcept {
         fail(MotionError::InternalError, "unknown motion start error");
         return StartResult::InvalidMotion;
     }
+}
+
+QueueResult RobotMotionPlayer::queueNext(std::string_view motion_name) noexcept {
+    if (!hardwareReady()) return QueueResult::HardwareNotReady;
+    if (!running() || pattern_ == nullptr) return QueueResult::RejectedNotRunning;
+    if (queued_pattern_ != nullptr) return QueueResult::RejectedQueueFull;
+
+    const std::string name(motion_name);
+    if (!library_.contains(name)) return QueueResult::MotionNotFound;
+    try {
+        const auto& next = library_.motion(name);
+        if (next.frames().empty()) return QueueResult::InvalidMotion;
+        if (!canSeamlesslyTransition(*pattern_, current_motion_, next, name))
+            return QueueResult::IncompatibleTransition;
+        queued_motion_ = name;
+        queued_pattern_ = &next;
+        return QueueResult::Queued;
+    } catch (const std::exception& error) {
+        last_error_ = error.what();
+        return QueueResult::InvalidMotion;
+    } catch (...) {
+        last_error_ = "unknown queued motion error";
+        return QueueResult::InvalidMotion;
+    }
+}
+
+bool RobotMotionPlayer::hasQueuedMotion() const noexcept {
+    return queued_pattern_ != nullptr;
+}
+
+std::string_view RobotMotionPlayer::queuedMotion() const noexcept {
+    return queued_motion_;
+}
+
+void RobotMotionPlayer::clearQueuedMotion() noexcept {
+    queued_pattern_ = nullptr;
+    queued_motion_.clear();
+}
+
+std::uint64_t RobotMotionPlayer::completionSequence() const noexcept {
+    return completion_sequence_;
+}
+
+std::string_view RobotMotionPlayer::lastCompletedMotion() const noexcept {
+    return last_completed_motion_;
+}
+
+bool RobotMotionPlayer::canSeamlesslyTransition(
+    const MotionPattern& current, std::string_view current_name,
+    const MotionPattern& next, std::string_view next_name) const noexcept {
+    // 같은 repeatable 모션은 기존 내부 repeat_count 순환과 같은 경계입니다.
+    if (current_name == next_name && current.repeatable()) return true;
+    return !current.endPose().empty()
+        && !next.startPose().empty()
+        && current.endPose() == next.startPose();
+}
+
+void RobotMotionPlayer::resetMotionRuntime(
+    const MotionPattern& pattern, std::string name, Clock::time_point now) noexcept {
+    pattern_ = &pattern;
+    current_motion_ = std::move(name);
+    next_frame_ = 0;
+    repeat_ = 1;
+    final_goal_deg_.clear();
+    final_goal_ids_.clear();
+    gated_goal_deg_.clear();
+    gated_goal_ids_.clear();
+    gated_frame_ = nullptr;
+    frame_gate_wait_started_at_ = Clock::time_point{};
+    frame_gate_last_check_at_ = Clock::time_point{};
+    settling_started_at_ = Clock::time_point{};
+    within_tolerance_since_ = Clock::time_point{};
+    last_position_check_at_ = Clock::time_point{};
+    within_tolerance_ = false;
+    started_at_ = now;
+    status_ = MotionStatus::Running;
+}
+
+bool RobotMotionPlayer::activateQueuedMotion(Clock::time_point now) noexcept {
+    if (queued_pattern_ == nullptr) return false;
+    const MotionPattern* next = queued_pattern_;
+    std::string next_name = std::move(queued_motion_);
+    queued_pattern_ = nullptr;
+    queued_motion_.clear();
+    last_completed_motion_ = current_motion_;
+    ++completion_sequence_;
+    resetMotionRuntime(*next, std::move(next_name), now);
+    error_ = MotionError::None;
+    last_error_.clear();
+    return true;
 }
 
 MotionStatus RobotMotionPlayer::update() noexcept {
@@ -160,6 +239,10 @@ MotionStatus RobotMotionPlayer::updateRunning(Clock::time_point now) {
         started_at_ = now;
         return status_;
     }
+
+    // 예약 명령은 최종 정착 상태로 들어가기 전에 같은 타임라인 경계에서
+    // 시작합니다. start() busy 검사를 제거하지 않으므로 런타임 상태가 섞이지 않습니다.
+    if (activateQueuedMotion(now)) return status_;
 
     status_ = MotionStatus::Settling;
     settling_started_at_ = now;
@@ -242,6 +325,9 @@ MotionStatus RobotMotionPlayer::updateSettling(Clock::time_point now) {
         fail(MotionError::InternalError, "settling motion has no pattern");
         return status_;
     }
+    // Executor가 경계 직후 Settling에서 예약했더라도 다음 update에서 즉시
+    // 안전한 호환 모션으로 전환합니다.
+    if (activateQueuedMotion(now)) return status_;
     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now - settling_started_at_).count();
     if (elapsed_ms > pattern_->completion().settle_timeout_ms) {
@@ -295,6 +381,8 @@ MotionStatus RobotMotionPlayer::updateSettling(Clock::time_point now) {
     status_ = MotionStatus::Succeeded;
     error_ = MotionError::None;
     last_error_.clear();
+    last_completed_motion_ = current_motion_;
+    ++completion_sequence_;
     std::cout << "[Info] Motion succeeded: " << current_motion_ << std::endl;
     return status_;
 }
@@ -339,6 +427,7 @@ CancelResult RobotMotionPlayer::cancel() noexcept {
     last_error_.clear();
     pattern_ = nullptr;
     next_frame_ = 0;
+    clearQueuedMotion();
     return CancelResult::Cancelled;
 }
 
@@ -353,6 +442,7 @@ bool RobotMotionPlayer::emergencyStop() noexcept {
     }
     pattern_ = nullptr;
     next_frame_ = 0;
+    clearQueuedMotion();
     return success;
 }
 
@@ -427,6 +517,7 @@ void RobotMotionPlayer::shutdown() noexcept {
         static_cast<void>(hardware_->setTorqueEnabled(false));
     }
     initialized_ = false;
+    clearQueuedMotion();
     if (status_ == MotionStatus::Running
         || status_ == MotionStatus::Settling) {
         status_ = MotionStatus::Cancelled;
@@ -440,6 +531,7 @@ void RobotMotionPlayer::fail(
     status_ = MotionStatus::Failed;
     pattern_ = nullptr;
     next_frame_ = 0;
+    clearQueuedMotion();
 }
 
 JointAngles RobotMotionPlayer::correctedFrameAngles(

@@ -1,0 +1,21 @@
+# ROS 2 build outputs
+/build/
+/install/
+/log/
+
+# Example or reference packages kept locally
+/src/king/
+/src/realsense-ros/
+
+# Python cache and local tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+

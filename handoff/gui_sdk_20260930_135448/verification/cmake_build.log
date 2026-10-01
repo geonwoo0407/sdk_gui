@@ -1,0 +1,25 @@
+[ 11%] Building CXX object CMakeFiles/motion_core.dir/motion_callback.cpp.o
+[ 11%] Building CXX object CMakeFiles/motion_core.dir/motion_pattern.cpp.o
+[ 16%] Linking CXX static library libmotion_core.a
+[ 16%] Built target motion_core
+[ 22%] Building CXX object CMakeFiles/test_motion_pattern.dir/test_motion_pattern.cpp.o
+[ 27%] Building CXX object CMakeFiles/test_motion_callback.dir/test_motion_callback.cpp.o
+[ 33%] Linking CXX executable test_motion_pattern
+[ 33%] Built target test_motion_pattern
+[ 38%] Building CXX object CMakeFiles/motion_player_core.dir/robot_motion_player.cpp.o
+[ 44%] Linking CXX executable test_motion_callback
+[ 44%] Built target test_motion_callback
+[ 50%] Linking CXX static library libmotion_player_core.a
+[ 50%] Built target motion_player_core
+[ 55%] Building CXX object CMakeFiles/test_robot_motion_player.dir/test_robot_motion_player.cpp.o
+[ 61%] Building CXX object CMakeFiles/robot_control.dir/robot_motion_player_dynamixel.cpp.o
+[ 66%] Linking CXX executable test_robot_motion_player
+[ 66%] Built target test_robot_motion_player
+[ 72%] Building CXX object CMakeFiles/robot_control.dir/dynamixel_motion_hardware.cpp.o
+[ 77%] Building CXX object CMakeFiles/robot_control.dir/step_dynamixel.cpp.o
+[ 83%] Building CXX object CMakeFiles/robot_control.dir/dynamixel_controller.cpp.o
+[ 88%] Linking CXX static library librobot_control.a
+[ 88%] Built target robot_control
+[ 94%] Building CXX object CMakeFiles/irc_robot.dir/main.cpp.o
+[100%] Linking CXX executable irc_robot
+[100%] Built target irc_robot

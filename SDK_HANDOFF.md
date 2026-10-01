@@ -130,9 +130,28 @@ topic은 제공하지 않는다.
 ```
 
 - `start_ms`, `time_ms`, `max_seq_ms`, completion 시간: millisecond
-- `angles`: degree
+- `angles`: degree. 손으로 읽은 소수 원본을 GUI 저장·재생·JSON 내보내기에
+  그대로 사용한다. 관절 숫자 입력칸과 슬라이더는 반올림한 정수로 표시하지만
+  소수 원본은 유지한다. 입력칸에서 수정 없이 Enter를 누르거나 포커스를
+  옮겨도 원본값은 보존하며, 직접 입력한 소수값도 사용할 수 있다.
+  화살표는 소수 부분을 유지하며 1도씩 조절한다. 모터 미연결 상태에서도
+  자세 편집은 가능하고, 숫자칸의 모터 전송은 연결·토크 ON 상태에서 Enter로 한다.
+  SDK도 `double`로 읽는다.
+  이전에 정수로 내보낸 JSON은 GUI를 재시작한 뒤 원본 시퀀스에서 다시
+  내보내야 한다. 이미 정수가 된 JSON만으로는 소수 원본을 복원할 수 없다.
 - angle/torque key: motor ID 문자열
 - `playback_speed`: timeline 배속, 0.1~5.0으로 clamp
+- GUI 시퀀스 조합은 각 원본 모션의 저장 배속을 유지한다. 조합의 `전체 배속`
+  1.00x가 원본 속도이며, 편집 타임라인 시간값과 실제 재생 소요시간은 별도로
+  표시한다. 조합 저장·JSON 내보내기는 원본 배속을 프레임 시작/끝 시각에
+  한 번 반영하고, 조합 전체 배속만 JSON의 `playback_speed`에 남긴다.
+- GUI 조합 프레임의 `playback_cycle_end`는 원본 1회 반복의 마지막 프레임을
+  표시한다. GUI는 해당 프레임의 최종 목표 전송과 피드백 처리가 끝난 뒤
+  다음 반복을 시작해 모션 제작의 단독 반복과 같은 통신 지연을 반영한다.
+  이 표시는 GUI 저장·재로드에도 유지되며 SDK 재생은 기존 시간 필드를 사용한다.
+- `sdk_gui_timing_repairs.json`은 확인된 옛 조합의 시간 보정 기록이다.
+  재시작할 때 시퀀스 ID·배속·반복·프레임 내용 지문이 모두 일치하는 경우만
+  적용하므로, 이미 고친 데이터나 사용자가 새로 수정한 프레임은 재보정하지 않는다.
 - `repeat_count`: 최소 1로 clamp
 - frame은 `start_ms` 기준으로 정렬
 - frame overlap, 음수 start, 0 이하 duration, frame보다 짧은
@@ -182,6 +201,47 @@ JSON에서 기계적으로 확인되는 정보:
 - `FAILED` 전용 reset API는 없다. 하드웨어가 여전히 ready라면 다음 유효한
   `start()`가 상태를 `RUNNING`으로 바꾼다. 하드웨어가 ready가 아니면
   원인을 복구하고 `initialize()`를 다시 호출해야 한다.
+
+### 연속 모션 예약 API
+
+`start()`는 기존처럼 `Running`/`Settling` 상태에서 `RejectedBusy`를
+반환한다. busy 검사를 우회하지 말고 다음 모션을 미리 예약할 때는
+다음 API를 사용한다.
+
+```cpp
+QueueResult queueNext(std::string_view motion_name);
+bool hasQueuedMotion() const;
+std::string_view queuedMotion() const;
+void clearQueuedMotion();
+std::uint64_t completionSequence() const;
+std::string_view lastCompletedMotion() const;
+```
+
+- 대기열은 최대 1개다. 이미 예약이 있으면 `RejectedQueueFull`이다.
+- 같은 모션을 연결할 때는 현재 모션이 `repeatable=true`여야 한다.
+- 서로 다른 모션은 현재 `end_pose`와 다음 `start_pose`가 같아야 한다.
+- 호환되지 않으면 `IncompatibleTransition`을 반환하며 현재 모션은
+  계속 실행된다.
+- 예약된 모션은 현재 모션의 마지막 반복 타임라인 경계에서
+  `Settling`을 거치지 않고 시작한다.
+- 경계 전환 시 이전 모션의 frame gate, 최종 Goal, settling timer를
+  모두 초기화한다.
+- `completionSequence()`는 무정착 경계 전환과 최종 정상 완료마다
+  1씩 증가한다. Executor는 이 값의 변화와 `lastCompletedMotion()`을
+  이용해 이전 ROS 명령을 완료 처리할 수 있다.
+
+예시:
+
+```cpp
+if (player.start("forward") == StartResult::Accepted) {
+    // 현재 forward가 끝나기 전에 비전 판단 결과를 1개 예약
+    const auto queued = player.queueNext("forward");
+}
+
+while (player.running()) {
+    player.update();
+}
+```
 
 ## 7. 확인되지 않은 실물 정보
 

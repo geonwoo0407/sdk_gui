@@ -1,0 +1,5 @@
+# Observed with Python 3.10.12 on Ubuntu 22.04.5; not a cross-platform lockfile.
+PyQt5==5.15.6
+dynamixel-sdk==4.0.5
+pyserial==3.5
+numpy==1.21.5

@@ -1,0 +1,307 @@
+{
+  "repository": "https://github.com/dbwldus0220-sys/IRC_vision",
+  "branch": "agent/production-integration-20260912",
+  "commit": "45fa1ddc136ff3af0d9ae355d4fbeeb45e5c248f",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "28d1f4fd9d54c44ab9f68a39e44e998a442dd24bcdd6c2c1e50b09ebffa58622"
+    },
+    {
+      "path": "artifacts/README.md",
+      "sha256": "0d79abf74a1a15b167785c4467a20d8ef23155a86c8493d9a64bcf2018168c96"
+    },
+    {
+      "path": "artifacts/robot_motions_runtime.json",
+      "sha256": "0881e319b5b02c7d62d92a03f2d1d3f7b48e9d0a6790bd8ec8939f2e0b252486"
+    },
+    {
+      "path": "docs/JETSON_SETUP.md",
+      "sha256": "414cdc1b6c274e8db28002800b1213c896f430bd1e34b59b1727f152eb73da60"
+    },
+    {
+      "path": "docs/MOTION_CATALOG.md",
+      "sha256": "a3b88cc3bb6ccb826c7a4ab8f7ce6eec966b106fc6ca225443b5c32420965cad"
+    },
+    {
+      "path": "docs/MOTION_INTERFACE.md",
+      "sha256": "c2ecd5543738bb32e7765a4d873b64bd02de241e6a7357607e2eab3c1a9651c8"
+    },
+    {
+      "path": "src/irc_step_motion_executor/CMakeLists.txt",
+      "sha256": "fab8e1db2968184f9b985e2cab4dc8d1ec3285dc25e8ac2705e80d2de0b9da22"
+    },
+    {
+      "path": "src/irc_step_motion_executor/README.md",
+      "sha256": "b43134db507a2f86eddae1454a0504b49d5702c2ae49dc1127b7e80592ecfa27"
+    },
+    {
+      "path": "src/irc_step_motion_executor/config/motion_aliases.yaml",
+      "sha256": "64233d6503bc55aaaf3fb5b942f6e725ee93048f89d84d0dfbeea4303895a92b"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/catalog_only_core.hpp",
+      "sha256": "5b5f0a00ed5cf554d26fcfd10b463fca046731cc3475c9e4de3186beaca4e6dd"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/motion_backend.hpp",
+      "sha256": "f29c656bae289e16f90b04e5e2c5ce24c6ec34d0a54c0178a7d81ebbd8e85413"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/motion_backend_factory.hpp",
+      "sha256": "4f10a351099e0c6323498da52dd8edcb44efc44096b554f05adbcb4c55756dc9"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_player_backend.hpp",
+      "sha256": "3c5f730e3684380a58f40821c860fd3a98edb9575ff7de533b0cef87196355c3"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_runtime_config.hpp",
+      "sha256": "2288b0851391b6c78bc23a8b6830d5a88d94a66263cdc655aca835daa8b38456"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_runtime_factory.hpp",
+      "sha256": "68c4ebe7f314059eeda706515db11784400565df2f0728f69c38ada8a141e00c"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_executor_core.hpp",
+      "sha256": "d2d848a66cf947c81868ce7324cdbdbc2635a9b06a25ccc203a72a6045fb94fc"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_executor_driver.hpp",
+      "sha256": "f24e7cb2d13a48e0446cab93960b0d8bbe1283b87c3412fdc52dc8893ca35c7e"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_hardware_preflight_core.hpp",
+      "sha256": "02186b233b24b5edee23b48c1456f3dae238af4665a07dcdca61c840abca7195"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/simulated_motion_backend.hpp",
+      "sha256": "d76acc2e91a306faadc3b96d0d56b2091b32b00045b136a55ef79fe9d484ebd1"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/startup_pose_catalog.hpp",
+      "sha256": "a2bd05e1b523c7c0ea31687943ce377460efc14e4cf785263ba8ba8e6288d9a3"
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/startup_pose_gate.hpp",
+      "sha256": "83b98ec69c142dc34fd55b00a83a000970e5f74cc8d3914803fdb2648244ea4a"
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/catalog_only.launch.py",
+      "sha256": "9c1b904771f2f1bd7b66fc52853a71a0cdf0543185c05126f049287501a1be34"
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/sdk_executor_simulated.launch.py",
+      "sha256": "6dad24e46140a821d1153b2a3a967017ce07675f496bc57264f2ef5573d17a36"
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/sdk_motion_test.launch.py",
+      "sha256": "77827ee1334f104f6792bd46238459be4a654800dc0b054a92feb036ea286d08"
+    },
+    {
+      "path": "src/irc_step_motion_executor/package.xml",
+      "sha256": "a9e87c285bbf99a10b4a9a6ebfaed4d0b8255bd4802aab604adf13ae2229cabc"
+    },
+    {
+      "path": "src/irc_step_motion_executor/scripts/manual_motion_request.py",
+      "sha256": "673647c802e795024d5ce5b63e85ef1be5a3c7b60109f9e29e250fa01f806eb6"
+    },
+    {
+      "path": "src/irc_step_motion_executor/scripts/validate_motion_catalog.py",
+      "sha256": "89c677d3cf5ec31d6af749e335a9a661595d8b977848490dc3674c0d97f7b5f1"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/catalog_only_core.cpp",
+      "sha256": "78af6a077a1bc0888c33e49696f3daafc385f7c0ed413f9abac9ba369bb800a5"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/catalog_only_node.cpp",
+      "sha256": "a9f0758838baf9a8b90fff66b3246f5ff1e0f3232b09f863aa220849db25dd28"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/motion_backend_factory.cpp",
+      "sha256": "352be68e9caebb214e73ca54548d0033ae732188c3e32b714eba60ee24c5b9bd"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/production_robot_motion_runtime_factory.cpp",
+      "sha256": "06d7798a5ff40b4a3c8119b3e33794da504e4991a2b24b28da03712d890b8e28"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/robot_motion_player_backend.cpp",
+      "sha256": "d0a4001c7d20dd8fb608a352d9e92f85e2781bc974c7c4422898b26f23fa7cbb"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/robot_motion_runtime_config.cpp",
+      "sha256": "f2a63896e5da7928fdb1536fa587e30c4322839053076e266f713a6120eb955a"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_compile_probe.cpp",
+      "sha256": "f1f28543aa6647cb97b2bc66c96e7875f976acc3b1031e594a8f7d41247091c2"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_core.cpp",
+      "sha256": "e8efe611a6381b59e7924daee1f21bcb8fa5cae6dad011890c297b00704a1044"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_driver.cpp",
+      "sha256": "f0b94d0f9092bbe1662832f9134b39eb6083fc17228e6904a91cec73dc17bd84"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_node.cpp",
+      "sha256": "e378ce3d845876452279061b69b1cfbdba6811a3215a5b55d40c88653d8e9143"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_hardware_preflight.cpp",
+      "sha256": "e2fe4338a1e95fac441923c1916bad69713d12a92cb3d1d2704c2a8d0d36905d"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_hardware_preflight_core.cpp",
+      "sha256": "266e5adaf420699aafde082eb631b99b590a48011dff7be1ce595194f6987080"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/simulated_motion_backend.cpp",
+      "sha256": "2bbeeb22a9a8b90d51db9559402966227dc8c381431b3bf51ea25e4fd6ccd2b4"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/startup_pose_catalog.cpp",
+      "sha256": "ce5b351b9f3dbebdf2e05d6d96ab2f323696a2d72b5ec12c931c10395b511e56"
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/startup_pose_gate.cpp",
+      "sha256": "1b03766bb0f4a7d9f0f39abdc2d97fa653281b3a90eb0d17666fe0884045e889"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fake_motion_backend.hpp",
+      "sha256": "4a0c92af13f2e2a5baec6d2c5854082b0cbcef8e3fd323eed8e0ee134dfbb021"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/CMakeLists.txt",
+      "sha256": "e5bc27f59987562706804e4fec3d5647a5276dde7462590ccd99e7e87098a1cc"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/dynamixel_motion_hardware.hpp",
+      "sha256": "e7d5ef4c9372adc7273f109c23650e75a88214de2e3934312cb8948b6134ff8a"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/fake_robot_motion_sdk_test_support.hpp",
+      "sha256": "51f45900a8ddde42d745e00683a34c4cfba1041af01576f01368a8186667208c"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/motion_hardware.hpp",
+      "sha256": "89088e00f9f0bdb5a00c3804041f9e12f2ae9cbdabd37ba1a4bd06f2d4f295ee"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/robot_motion_player.cpp",
+      "sha256": "d5b154440f668656019a43da515aa4e4ab738b87fcf7da73d3be8e1715ed308c"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/robot_motion_player.hpp",
+      "sha256": "8f0ecde0079eb2bbb956f376aa53ca1cb5875f5dfe69ab5ec7edf427a5f8e6ba"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_files_sdk/CMakeLists.txt",
+      "sha256": "6ee2905925d9fa7a9ff1caed1e2e79337cbebd0674f9a74566dd78136483f216"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/CMakeLists.txt",
+      "sha256": "7cb4fa8d010270ce5ecc109a8125c9d6c2239b6362a169e7e20a188c05b12d77"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/robot_motion_player.cpp",
+      "sha256": "b68bfc7d3cf214a746af0d4d4191a47fdda8fea17e1c92aab4d5d899935a40f2"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/robot_motion_player.hpp",
+      "sha256": "061aae93c9bf9e72efc80c6ccbaed777a2a2aa6a2bf95275f0e311f0ecf6a6e8"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/legacy_catalog_contract_vectors.json",
+      "sha256": "70adbc3900ca18b6d35a687608d872f36888d933c1acf1ff0b6f6a3571361233"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/run_sdk_cmake_case.cmake",
+      "sha256": "15ab38e57e22176f761849be4f091d9d8155a9a3dd459d9571996f99421f2aae"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/run_sdk_disabled_case.cmake",
+      "sha256": "fb3108070226dba025b3d06be939622e38072864bc8314b38519dee47e9006c4"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_backend_selection_rejected_launch.py",
+      "sha256": "8c5129382101cda706369437a0dfca096116f4def5068a2312ab651e86f59ec7"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_catalog_only_core.cpp",
+      "sha256": "785cc3304ce709ea7d07c062c8b5a9d25ec33ddeb9a6b15c9d165fd503cf81c4"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_motion_backend_factory.cpp",
+      "sha256": "63e49121e2771a82f0dcdd5e7c4a1531049da0d2484d5a3c6c1e2c11851c937b"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_motion_json_catalog.cpp",
+      "sha256": "44cef2ca54e760c8db6a37db57741ec7f322d42881293653c4ce7620c1e5f2fd"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_production_robot_motion_runtime_factory.cpp",
+      "sha256": "28db186d383fec60e6474dd7d38efb382544dca4544c62fae0ac15da026e3f7c"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_parameter_types.cpp",
+      "sha256": "2958219c8ace40b67d15f32501380cac0072fa3b200656a895a1c3325e46e710"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_player_backend.cpp",
+      "sha256": "0130321b99e364637910075b294195856be88ad6871f9a9a718ace8f163943aa"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_runtime_config.cpp",
+      "sha256": "a0317f53f857eeda3d33cd4fcb0d64d5f65adddb7aa1f0011055673ef760505e"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_core.cpp",
+      "sha256": "85543150ce38ab33ecd7b27075644fdd0289a3219ee78b1978d2b84112d1a0c7"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_driver.cpp",
+      "sha256": "d55f26dc1437d4fc50ef86a338e3ad215f4f74bc6b0707dde08552a0ec42a830"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_node_launch.py",
+      "sha256": "c48fbde1fd17129984e933c3c56ddc6c0e51d50033ff083471bb1cea78587d22"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_hardware_preflight_core.cpp",
+      "sha256": "20d1f0d818fe2b5b234e7f54277084bf14e50f3120832814099193720e164c9d"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_simulated_motion_backend.cpp",
+      "sha256": "37a42d0264ec79138d8efc4ad2a4d1949e5004aa71388b2df838287b4d92d3ac"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_startup_pose_catalog.cpp",
+      "sha256": "96b2c06704c7c56ba650cdc1a867beeb1862b0bc92084db41299b20ed3bfec0b"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_startup_pose_gate.cpp",
+      "sha256": "bc00d577c35a0b4dfcf9aad05a1c7b42beec203033cb37cff6b4329c1e8efd88"
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_validate_motion_catalog.py",
+      "sha256": "d27f73d261eb7b02c0993eac187e169e33824f384fdbe11a417c7901f31252b8"
+    },
+    {
+      "path": "src/mission_control/launch/full_system.launch.py",
+      "sha256": "0cb49e394388812927e5fd5caa6ccc3fd4cc199f8a818168d0e4e09e5a614383"
+    },
+    {
+      "path": "src/mission_control/launch/full_system_robot.launch.py",
+      "sha256": "b9c21e404d73f505c1e2541c038faafcae1866a08695597fe9ae2d6e9af1db11"
+    },
+    {
+      "path": "tools/export_gui_motion_candidates.py",
+      "sha256": "92be1f920553e394780b150990b835e3bfe294c1243b73619cc64be2a5cca373"
+    }
+  ]
+}

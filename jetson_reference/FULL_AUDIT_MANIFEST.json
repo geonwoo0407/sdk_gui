@@ -1,0 +1,1596 @@
+{
+  "repository": "https://github.com/dbwldus0220-sys/IRC_vision",
+  "branch": "agent/production-integration-20260912",
+  "commit": "45fa1ddc136ff3af0d9ae355d4fbeeb45e5c248f",
+  "total_files": 197,
+  "groups": {
+    ".gitignore": 1,
+    "README.md": 1,
+    "archive": 11,
+    "artifacts": 3,
+    "docs": 6,
+    "src/irc_step_motion_executor": 66,
+    "src/mission_control": 54,
+    "src/step": 52,
+    "tools": 3
+  },
+  "python_parse_errors": [],
+  "files": [
+    {
+      "path": ".gitignore",
+      "git_blob": "fb8c4ea60c1ac46975a1dc06beb0b7ea555915bc",
+      "sha256": "d6bee5aac202114d9afb76558ca4b47bdd12730c2bbce4a9603fc726e1547b03",
+      "bytes": 271,
+      "kind": "text",
+      "lines": 21
+    },
+    {
+      "path": "README.md",
+      "git_blob": "67ca84c86bf28db5a15c927f5f0f25791d9201d0",
+      "sha256": "28d1f4fd9d54c44ab9f68a39e44e998a442dd24bcdd6c2c1e50b09ebffa58622",
+      "bytes": 10110,
+      "kind": "text",
+      "lines": 396
+    },
+    {
+      "path": "archive/legacy_opencv/README.md",
+      "git_blob": "4639cabf3668d4874b5ae284cf9db6c201763448",
+      "sha256": "678fc22f7371a63e23f43d12051e1f882637bb5f25c145ea6b0089080efc9328",
+      "bytes": 496,
+      "kind": "text",
+      "lines": 10
+    },
+    {
+      "path": "archive/legacy_opencv/find_ddirect.py",
+      "git_blob": "08e08f082e08825d7e9227e6fb4adfcdf4b43a72",
+      "sha256": "0e760d0a80a4c9b39c6f481792f48a0e543e3af071f19eb5fa3abb87cfbb1d66",
+      "bytes": 6692,
+      "kind": "text",
+      "lines": 173
+    },
+    {
+      "path": "archive/legacy_opencv/find_direct.py",
+      "git_blob": "ee29e90c8b4dcb4578c7d1967baef8f829fab51f",
+      "sha256": "dd572b68cd0e18897c07ff753d17efbad98cd619791f0cb3b558aff4163957f0",
+      "bytes": 5693,
+      "kind": "text",
+      "lines": 147
+    },
+    {
+      "path": "archive/legacy_opencv/look_gground.py",
+      "git_blob": "afe98a871bc273647a01ae6e5f643ca1eb82d821",
+      "sha256": "c31e22aba6961dd0b48a7250901b0370accd4fd7b406d6865e8bbda3c56c09ea",
+      "bytes": 6214,
+      "kind": "text",
+      "lines": 147
+    },
+    {
+      "path": "archive/legacy_opencv/look_ground.py",
+      "git_blob": "b9b402aca317a044b885d83a867488e81a11b4fd",
+      "sha256": "241df6fe151f5cb29c45da70b3e06a5253e4f75cf2e38825dbe06251ce880703",
+      "bytes": 4747,
+      "kind": "text",
+      "lines": 114
+    },
+    {
+      "path": "archive/legacy_vision_versions/line_path_visualizer_v1.py",
+      "git_blob": "5edae1f585498808da9c9bb3489910a61bd82df3",
+      "sha256": "43cebd05be39910b60bf8206f1877abb9dae56cf2649ad74e41c00ce8c93f37f",
+      "bytes": 28125,
+      "kind": "text",
+      "lines": 1219
+    },
+    {
+      "path": "archive/legacy_vision_versions/yolo_line_analyzer_v1.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "kind": "text",
+      "lines": 0
+    },
+    {
+      "path": "archive/legacy_vision_versions/yolo_line_analyzer_v2.py",
+      "git_blob": "9742feedf223a5ffb41317419a5724523eb2fb23",
+      "sha256": "b9d49c336a5ed5943d57d9121c13b2e691b9ceae7b925b783dd3d72c50912e6b",
+      "bytes": 28252,
+      "kind": "text",
+      "lines": 1282
+    },
+    {
+      "path": "archive/legacy_vision_versions/yolo_line_analyzer_v3.py",
+      "git_blob": "22ebd16b8acb0b9d083ae92140924ea44fe54c2b",
+      "sha256": "e77e1546d0ea4221f3ce7fe06715b09191d8798d90aa35d314bbd5a30b437f38",
+      "bytes": 34248,
+      "kind": "text",
+      "lines": 1498
+    },
+    {
+      "path": "archive/legacy_vision_versions/yolo_line_analyzer_v4.py",
+      "git_blob": "9ffe751bb000dedb3b2fc8d11896c9c8deec0b75",
+      "sha256": "a01b410ea1b59593a6a8059103a1a3d395ae96a4637ad6c53679d26679f70acd",
+      "bytes": 41850,
+      "kind": "text",
+      "lines": 1769
+    },
+    {
+      "path": "archive/legacy_vision_versions/yolo_line_analyzer_v5.py",
+      "git_blob": "fb634ea615e280bc52b294844a68dfc75797d7be",
+      "sha256": "2853d0f9d702e5b772d27e4620109c9f6d86afe4f13f24eb52ac0a1ecccb2c01",
+      "bytes": 59568,
+      "kind": "text",
+      "lines": 2607
+    },
+    {
+      "path": "artifacts/README.md",
+      "git_blob": "429cd304f1748439f48d2e92235c229540dbb5ae",
+      "sha256": "0d79abf74a1a15b167785c4467a20d8ef23155a86c8493d9a64bcf2018168c96",
+      "bytes": 761,
+      "kind": "text",
+      "lines": 18
+    },
+    {
+      "path": "artifacts/robot_motions_candidates.json",
+      "git_blob": "78a0563edc146e029555b5884b44eb1857540364",
+      "sha256": "e02b9c0552cf2b300fc92f5e85a1e7d68e1d9b05f88c9b2bbc978d4433e558eb",
+      "bytes": 106981,
+      "kind": "text",
+      "lines": 2823
+    },
+    {
+      "path": "artifacts/robot_motions_runtime.json",
+      "git_blob": "f44297bb50fceb72f29703f760cd30c260d9d9cb",
+      "sha256": "0881e319b5b02c7d62d92a03f2d1d3f7b48e9d0a6790bd8ec8939f2e0b252486",
+      "bytes": 1067643,
+      "kind": "text",
+      "lines": 40133
+    },
+    {
+      "path": "docs/JETSON_SETUP.md",
+      "git_blob": "0ccd3145caef7169ffdef81e1a18cefad2ca353f",
+      "sha256": "414cdc1b6c274e8db28002800b1213c896f430bd1e34b59b1727f152eb73da60",
+      "bytes": 10063,
+      "kind": "text",
+      "lines": 638
+    },
+    {
+      "path": "docs/MISSION_PHASE_MANAGER_DESIGN.md",
+      "git_blob": "2bd947a4a1c66ab8bc5d76fb21177de502409f8f",
+      "sha256": "f1b4878b3d55f5b02a70e6566f629abcddfe70e4c87488791a46747ca6d5ad9e",
+      "bytes": 37784,
+      "kind": "text",
+      "lines": 728
+    },
+    {
+      "path": "docs/MOTION_CATALOG.md",
+      "git_blob": "380bc64fc61090100a59150fed482a6609c82c10",
+      "sha256": "a3b88cc3bb6ccb826c7a4ab8f7ce6eec966b106fc6ca225443b5c32420965cad",
+      "bytes": 2822,
+      "kind": "text",
+      "lines": 56
+    },
+    {
+      "path": "docs/MOTION_INTERFACE.md",
+      "git_blob": "1aedd02a9a8eb29807533a7bac051445d54d235e",
+      "sha256": "c2ecd5543738bb32e7765a4d873b64bd02de241e6a7357607e2eab3c1a9651c8",
+      "bytes": 34919,
+      "kind": "text",
+      "lines": 850
+    },
+    {
+      "path": "docs/PC_SETUP.md",
+      "git_blob": "6fc342e75f633c1ac645b322b67ea04d38232926",
+      "sha256": "95e766080ba98af9c2a12718bbb6bafe37d7d194be003bad1e93fa036a9e591a",
+      "bytes": 8722,
+      "kind": "text",
+      "lines": 466
+    },
+    {
+      "path": "docs/PRESENTATION_HANDOFF.md",
+      "git_blob": "26c8ef3c5b6146d0614d0bba8a8f20453eec20d3",
+      "sha256": "464cb4e776ba5b0eb2b2ee481ea4c87fb2f83b80894512da5578bd306fc04f81",
+      "bytes": 12791,
+      "kind": "text",
+      "lines": 260
+    },
+    {
+      "path": "src/irc_step_motion_executor/CMakeLists.txt",
+      "git_blob": "78d84f4e02f978442a7638bc14c1e8387ce80fb9",
+      "sha256": "fab8e1db2968184f9b985e2cab4dc8d1ec3285dc25e8ac2705e80d2de0b9da22",
+      "bytes": 16589,
+      "kind": "text",
+      "lines": 406
+    },
+    {
+      "path": "src/irc_step_motion_executor/README.md",
+      "git_blob": "677ad82239972d04ea0b881e151049f4a065f16d",
+      "sha256": "b43134db507a2f86eddae1454a0504b49d5702c2ae49dc1127b7e80592ecfa27",
+      "bytes": 16364,
+      "kind": "text",
+      "lines": 305
+    },
+    {
+      "path": "src/irc_step_motion_executor/config/motion_aliases.yaml",
+      "git_blob": "f49259ceacc6a99d15e6c21af2b1f1dc461301ae",
+      "sha256": "64233d6503bc55aaaf3fb5b942f6e725ee93048f89d84d0dfbeea4303895a92b",
+      "bytes": 6010,
+      "kind": "text",
+      "lines": 110
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/catalog_only_core.hpp",
+      "git_blob": "fb121589d2309131ea22b2a1d9c6bc5a812611b2",
+      "sha256": "5b5f0a00ed5cf554d26fcfd10b463fca046731cc3475c9e4de3186beaca4e6dd",
+      "bytes": 1456,
+      "kind": "text",
+      "lines": 59
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/motion_backend.hpp",
+      "git_blob": "027bd4bf3fdb3868e0d7ca98d1fbc50889e26b33",
+      "sha256": "f29c656bae289e16f90b04e5e2c5ce24c6ec34d0a54c0178a7d81ebbd8e85413",
+      "bytes": 1637,
+      "kind": "text",
+      "lines": 80
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/motion_backend_factory.hpp",
+      "git_blob": "844a09a4d5d26a930a3fdc8552e6be500f5fea07",
+      "sha256": "4f10a351099e0c6323498da52dd8edcb44efc44096b554f05adbcb4c55756dc9",
+      "bytes": 1261,
+      "kind": "text",
+      "lines": 43
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_player_backend.hpp",
+      "git_blob": "486b56e26cd34530c6bf594389ba287cd7b7affb",
+      "sha256": "3c5f730e3684380a58f40821c860fd3a98edb9575ff7de533b0cef87196355c3",
+      "bytes": 2628,
+      "kind": "text",
+      "lines": 76
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_runtime_config.hpp",
+      "git_blob": "e224133c24ddc9b16fbca0e92fbf3e70b9048d0e",
+      "sha256": "2288b0851391b6c78bc23a8b6830d5a88d94a66263cdc655aca835daa8b38456",
+      "bytes": 1671,
+      "kind": "text",
+      "lines": 58
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/robot_motion_runtime_factory.hpp",
+      "git_blob": "4ac54d6660af0cc4387184d5aae86be59e7b155f",
+      "sha256": "68c4ebe7f314059eeda706515db11784400565df2f0728f69c38ada8a141e00c",
+      "bytes": 2541,
+      "kind": "text",
+      "lines": 106
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_executor_core.hpp",
+      "git_blob": "dee2e50e618019ca2ca72ee169dc3126bb848807",
+      "sha256": "d2d848a66cf947c81868ce7324cdbdbc2635a9b06a25ccc203a72a6045fb94fc",
+      "bytes": 1493,
+      "kind": "text",
+      "lines": 52
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_executor_driver.hpp",
+      "git_blob": "23b6b612793be1307b475fdf7978f641574c376e",
+      "sha256": "f24e7cb2d13a48e0446cab93960b0d8bbe1283b87c3412fdc52dc8893ca35c7e",
+      "bytes": 1149,
+      "kind": "text",
+      "lines": 42
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/sdk_hardware_preflight_core.hpp",
+      "git_blob": "6209dcdab02484286d765033e78967c0b77e7605",
+      "sha256": "02186b233b24b5edee23b48c1456f3dae238af4665a07dcdca61c840abca7195",
+      "bytes": 1063,
+      "kind": "text",
+      "lines": 42
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/simulated_motion_backend.hpp",
+      "git_blob": "9be68a2f406a4267b48a4cbd33f70d3535ccc0ea",
+      "sha256": "d76acc2e91a306faadc3b96d0d56b2091b32b00045b136a55ef79fe9d484ebd1",
+      "bytes": 1294,
+      "kind": "text",
+      "lines": 45
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/startup_pose_catalog.hpp",
+      "git_blob": "6f6da46a4b045d6edf2dc0ef3943792f481beaa1",
+      "sha256": "a2bd05e1b523c7c0ea31687943ce377460efc14e4cf785263ba8ba8e6288d9a3",
+      "bytes": 407,
+      "kind": "text",
+      "lines": 16
+    },
+    {
+      "path": "src/irc_step_motion_executor/include/irc_step_motion_executor/startup_pose_gate.hpp",
+      "git_blob": "165e9f24bbd2398a8f8fa95d4be5c5646a69b7d7",
+      "sha256": "83b98ec69c142dc34fd55b00a83a000970e5f74cc8d3914803fdb2648244ea4a",
+      "bytes": 1354,
+      "kind": "text",
+      "lines": 49
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/catalog_only.launch.py",
+      "git_blob": "18726ab8eef9b78284e5eca6e5cad4225cbcaf5c",
+      "sha256": "9c1b904771f2f1bd7b66fc52853a71a0cdf0543185c05126f049287501a1be34",
+      "bytes": 1164,
+      "kind": "text",
+      "lines": 34
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/sdk_executor_simulated.launch.py",
+      "git_blob": "b406455b2ff278e85084a5eafd93c51b4d3413d1",
+      "sha256": "6dad24e46140a821d1153b2a3a967017ce07675f496bc57264f2ef5573d17a36",
+      "bytes": 2073,
+      "kind": "text",
+      "lines": 48
+    },
+    {
+      "path": "src/irc_step_motion_executor/launch/sdk_motion_test.launch.py",
+      "git_blob": "03e2dad3d68c05dd96fac0d61b82cabb5ff0a0bd",
+      "sha256": "77827ee1334f104f6792bd46238459be4a654800dc0b054a92feb036ea286d08",
+      "bytes": 3452,
+      "kind": "text",
+      "lines": 82
+    },
+    {
+      "path": "src/irc_step_motion_executor/package.xml",
+      "git_blob": "99f2d0496b49db8d57370e7f0dee17b2f53bd4b0",
+      "sha256": "a9e87c285bbf99a10b4a9a6ebfaed4d0b8255bd4802aab604adf13ae2229cabc",
+      "bytes": 1061,
+      "kind": "text",
+      "lines": 26
+    },
+    {
+      "path": "src/irc_step_motion_executor/scripts/manual_motion_request.py",
+      "git_blob": "d1b731109c9aacf9e8dd8bdf08e17cea370040f1",
+      "sha256": "673647c802e795024d5ce5b63e85ef1be5a3c7b60109f9e29e250fa01f806eb6",
+      "bytes": 3876,
+      "kind": "text",
+      "lines": 113
+    },
+    {
+      "path": "src/irc_step_motion_executor/scripts/validate_motion_catalog.py",
+      "git_blob": "4bbd2f923d42c3ffd4156ff3e160dd12d46fed42",
+      "sha256": "89c677d3cf5ec31d6af749e335a9a661595d8b977848490dc3674c0d97f7b5f1",
+      "bytes": 4361,
+      "kind": "text",
+      "lines": 125
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/catalog_only_core.cpp",
+      "git_blob": "021cff168cc41314b136372e183a3e1672606f86",
+      "sha256": "78af6a077a1bc0888c33e49696f3daafc385f7c0ed413f9abac9ba369bb800a5",
+      "bytes": 7471,
+      "kind": "text",
+      "lines": 257
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/catalog_only_node.cpp",
+      "git_blob": "4ab7843be5ae15c4a439e61c8999a195adaede06",
+      "sha256": "a9f0758838baf9a8b90fff66b3246f5ff1e0f3232b09f863aa220849db25dd28",
+      "bytes": 3113,
+      "kind": "text",
+      "lines": 97
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/motion_backend_factory.cpp",
+      "git_blob": "4c23d4922913d2654b73ac4e33bc0d07e3a729ff",
+      "sha256": "352be68e9caebb214e73ca54548d0033ae732188c3e32b714eba60ee24c5b9bd",
+      "bytes": 2312,
+      "kind": "text",
+      "lines": 77
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/production_robot_motion_runtime_factory.cpp",
+      "git_blob": "3228b6557fb1cc90254eae9546d6a77be197616f",
+      "sha256": "06d7798a5ff40b4a3c8119b3e33794da504e4991a2b24b28da03712d890b8e28",
+      "bytes": 6547,
+      "kind": "text",
+      "lines": 229
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/robot_motion_player_backend.cpp",
+      "git_blob": "7c6a15962b350581539e056e29a0ebde4d490b21",
+      "sha256": "d0a4001c7d20dd8fb608a352d9e92f85e2781bc974c7c4422898b26f23fa7cbb",
+      "bytes": 9426,
+      "kind": "text",
+      "lines": 322
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/robot_motion_runtime_config.cpp",
+      "git_blob": "c488f26920bf177efa95ebd683dc0102f366b247",
+      "sha256": "f2a63896e5da7928fdb1536fa587e30c4322839053076e266f713a6120eb955a",
+      "bytes": 5988,
+      "kind": "text",
+      "lines": 199
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_compile_probe.cpp",
+      "git_blob": "9fac9fae3cbaabe8a8beec6db0799c67f04b2557",
+      "sha256": "f1f28543aa6647cb97b2bc66c96e7875f976acc3b1031e594a8f7d41247091c2",
+      "bytes": 230,
+      "kind": "text",
+      "lines": 11
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_core.cpp",
+      "git_blob": "6f6a24f21c221b9e748070484c98f91b5e24f782",
+      "sha256": "e8efe611a6381b59e7924daee1f21bcb8fa5cae6dad011890c297b00704a1044",
+      "bytes": 13554,
+      "kind": "text",
+      "lines": 459
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_driver.cpp",
+      "git_blob": "d61b410cb01420dae50b475521f7c79c0d22f8ca",
+      "sha256": "f0b94d0f9092bbe1662832f9134b39eb6083fc17228e6904a91cec73dc17bd84",
+      "bytes": 1749,
+      "kind": "text",
+      "lines": 65
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_executor_node.cpp",
+      "git_blob": "2f74336a1b61b01696444fc18b46e18940673e8b",
+      "sha256": "e378ce3d845876452279061b69b1cfbdba6811a3215a5b55d40c88653d8e9143",
+      "bytes": 15905,
+      "kind": "text",
+      "lines": 419
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_hardware_preflight.cpp",
+      "git_blob": "aac654264871b754a34c5338e94750714f15a449",
+      "sha256": "e2fe4338a1e95fac441923c1916bad69713d12a92cb3d1d2704c2a8d0d36905d",
+      "bytes": 1284,
+      "kind": "text",
+      "lines": 42
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/sdk_hardware_preflight_core.cpp",
+      "git_blob": "701f3976073d98d8fd2930fe014604729cef643c",
+      "sha256": "266e5adaf420699aafde082eb631b99b590a48011dff7be1ce595194f6987080",
+      "bytes": 5853,
+      "kind": "text",
+      "lines": 191
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/simulated_motion_backend.cpp",
+      "git_blob": "4d11dba4e6395c36910640178d12d70135ff5c02",
+      "sha256": "2bbeeb22a9a8b90d51db9559402966227dc8c381431b3bf51ea25e4fd6ccd2b4",
+      "bytes": 2443,
+      "kind": "text",
+      "lines": 99
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/startup_pose_catalog.cpp",
+      "git_blob": "4d2480fe21a1ca1adb29d4e192be43a14a91dea5",
+      "sha256": "ce5b351b9f3dbebdf2e05d6d96ab2f323696a2d72b5ec12c931c10395b511e56",
+      "bytes": 3254,
+      "kind": "text",
+      "lines": 89
+    },
+    {
+      "path": "src/irc_step_motion_executor/src/startup_pose_gate.cpp",
+      "git_blob": "ca1cc847eb69389f32919cf76a02aa10943b4311",
+      "sha256": "1b03766bb0f4a7d9f0f39abdc2d97fa653281b3a90eb0d17666fe0884045e889",
+      "bytes": 3466,
+      "kind": "text",
+      "lines": 110
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fake_motion_backend.hpp",
+      "git_blob": "7536e452beaebb0e6f8fe7e1888cdcff083c04d6",
+      "sha256": "4a0c92af13f2e2a5baec6d2c5854082b0cbcef8e3fd323eed8e0ee134dfbb021",
+      "bytes": 2278,
+      "kind": "text",
+      "lines": 79
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/CMakeLists.txt",
+      "git_blob": "1c5ef68e56a1f72a1e8f6e88e1516fb28961ea24",
+      "sha256": "e5bc27f59987562706804e4fec3d5647a5276dde7462590ccd99e7e87098a1cc",
+      "bytes": 308,
+      "kind": "text",
+      "lines": 6
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/dynamixel_motion_hardware.hpp",
+      "git_blob": "d02be9e44981b985745baffb9605694e8bae72b1",
+      "sha256": "e7d5ef4c9372adc7273f109c23650e75a88214de2e3934312cb8948b6134ff8a",
+      "bytes": 874,
+      "kind": "text",
+      "lines": 40
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/fake_robot_motion_sdk_test_support.hpp",
+      "git_blob": "272dca938e8e3c92bcb0fef05e90323f2e4fbc29",
+      "sha256": "51f45900a8ddde42d745e00683a34c4cfba1041af01576f01368a8186667208c",
+      "bytes": 841,
+      "kind": "text",
+      "lines": 27
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/motion_hardware.hpp",
+      "git_blob": "92fde2fe080e1e2aa4eeb14c966d190d762192b6",
+      "sha256": "89088e00f9f0bdb5a00c3804041f9e12f2ae9cbdabd37ba1a4bd06f2d4f295ee",
+      "bytes": 315,
+      "kind": "text",
+      "lines": 17
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/robot_motion_player.cpp",
+      "git_blob": "28b0c5950ea68ddd7d36079c4032708438b9993b",
+      "sha256": "d5b154440f668656019a43da515aa4e4ab738b87fcf7da73d3be8e1715ed308c",
+      "bytes": 5884,
+      "kind": "text",
+      "lines": 238
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/fake_robot_motion_sdk/robot_motion_player.hpp",
+      "git_blob": "8ffd961799446285c9ac47c83f6298d823db0792",
+      "sha256": "8f0ecde0079eb2bbb956f376aa53ca1cb5875f5dfe69ab5ec7edf427a5f8e6ba",
+      "bytes": 1962,
+      "kind": "text",
+      "lines": 96
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_files_sdk/CMakeLists.txt",
+      "git_blob": "78bdc9fce91f654df0165dff503df7082f2059c4",
+      "sha256": "6ee2905925d9fa7a9ff1caed1e2e79337cbebd0674f9a74566dd78136483f216",
+      "bytes": 74,
+      "kind": "text",
+      "lines": 3
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/CMakeLists.txt",
+      "git_blob": "439a89c3f33d6ef4b42c95526e117ea0ad2fc1aa",
+      "sha256": "7cb4fa8d010270ce5ecc109a8125c9d6c2239b6362a169e7e20a188c05b12d77",
+      "bytes": 99,
+      "kind": "text",
+      "lines": 3
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/robot_motion_player.cpp",
+      "git_blob": "148e48f574e1ca6e1e9a023757ada8813d733537",
+      "sha256": "b68bfc7d3cf214a746af0d4d4191a47fdda8fea17e1c92aab4d5d899935a40f2",
+      "bytes": 35,
+      "kind": "text",
+      "lines": 1
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/fixtures/missing_target_sdk/robot_motion_player.hpp",
+      "git_blob": "abf9d6dab0c37a637ae3006d068b1869d4a90609",
+      "sha256": "061aae93c9bf9e72efc80c6ccbaed777a2a2aa6a2bf95275f0e311f0ecf6a6e8",
+      "bytes": 174,
+      "kind": "text",
+      "lines": 6
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/legacy_catalog_contract_vectors.json",
+      "git_blob": "25aa83340ec1ba2a11082e82d9fb12c22a5f06ce",
+      "sha256": "70adbc3900ca18b6d35a687608d872f36888d933c1acf1ff0b6f6a3571361233",
+      "bytes": 1980,
+      "kind": "text",
+      "lines": 92
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/run_sdk_cmake_case.cmake",
+      "git_blob": "d69eee6981f3a1c8806e2b2dd71908ad0e6988fd",
+      "sha256": "15ab38e57e22176f761849be4f091d9d8155a9a3dd459d9571996f99421f2aae",
+      "bytes": 2975,
+      "kind": "text",
+      "lines": 80
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/run_sdk_disabled_case.cmake",
+      "git_blob": "26c36b75e6ae0335b43a78345caafd496ee98d66",
+      "sha256": "fb3108070226dba025b3d06be939622e38072864bc8314b38519dee47e9006c4",
+      "bytes": 2475,
+      "kind": "text",
+      "lines": 74
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_backend_selection_rejected_launch.py",
+      "git_blob": "a371c4f832ed4d8d5bf2e00153edc58d3dd8030a",
+      "sha256": "8c5129382101cda706369437a0dfca096116f4def5068a2312ab651e86f59ec7",
+      "bytes": 1920,
+      "kind": "text",
+      "lines": 66
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_catalog_only_core.cpp",
+      "git_blob": "5562ce0de4c0e5c42b0b7df7a5b1e321aca2a6fc",
+      "sha256": "785cc3304ce709ea7d07c062c8b5a9d25ec33ddeb9a6b15c9d165fd503cf81c4",
+      "bytes": 10548,
+      "kind": "text",
+      "lines": 269
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_motion_backend_factory.cpp",
+      "git_blob": "fbe6d88d13bd7ebde6b706685e952167770f3bed",
+      "sha256": "63e49121e2771a82f0dcdd5e7c4a1531049da0d2484d5a3c6c1e2c11851c937b",
+      "bytes": 9547,
+      "kind": "text",
+      "lines": 294
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_motion_json_catalog.cpp",
+      "git_blob": "f778fa5317cf3b1c019e88ceeefb4267a98fb83d",
+      "sha256": "44cef2ca54e760c8db6a37db57741ec7f322d42881293653c4ce7620c1e5f2fd",
+      "bytes": 9004,
+      "kind": "text",
+      "lines": 295
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_production_robot_motion_runtime_factory.cpp",
+      "git_blob": "6d5152711dc0f1b9d0e7bf96c93b8b4b30a35ceb",
+      "sha256": "28db186d383fec60e6474dd7d38efb382544dca4544c62fae0ac15da026e3f7c",
+      "bytes": 11636,
+      "kind": "text",
+      "lines": 302
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_parameter_types.cpp",
+      "git_blob": "6d8cd48703373954cb3eac984e351c77f8d9b9f7",
+      "sha256": "2958219c8ace40b67d15f32501380cac0072fa3b200656a895a1c3325e46e710",
+      "bytes": 1176,
+      "kind": "text",
+      "lines": 35
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_player_backend.cpp",
+      "git_blob": "ebc4c9a75a060cdcd5a953762bbff69f1f5cfb53",
+      "sha256": "0130321b99e364637910075b294195856be88ad6871f9a9a718ace8f163943aa",
+      "bytes": 7958,
+      "kind": "text",
+      "lines": 269
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_robot_motion_runtime_config.cpp",
+      "git_blob": "eafb2304f8a5339196b9302001ca7f2eb2761c29",
+      "sha256": "a0317f53f857eeda3d33cd4fcb0d64d5f65adddb7aa1f0011055673ef760505e",
+      "bytes": 8186,
+      "kind": "text",
+      "lines": 286
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_core.cpp",
+      "git_blob": "5d11dd71947bdbaccca0c767618bbefeb223670f",
+      "sha256": "85543150ce38ab33ecd7b27075644fdd0289a3219ee78b1978d2b84112d1a0c7",
+      "bytes": 13260,
+      "kind": "text",
+      "lines": 391
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_driver.cpp",
+      "git_blob": "97f07e2643c6f0719dfe53066059fd48e54dec57",
+      "sha256": "d55f26dc1437d4fc50ef86a338e3ad215f4f74bc6b0707dde08552a0ec42a830",
+      "bytes": 6889,
+      "kind": "text",
+      "lines": 219
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_executor_node_launch.py",
+      "git_blob": "59c9e388f962cd0b0e9f2f72f27492fc4ad310dd",
+      "sha256": "c48fbde1fd17129984e933c3c56ddc6c0e51d50033ff083471bb1cea78587d22",
+      "bytes": 11363,
+      "kind": "text",
+      "lines": 340
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_sdk_hardware_preflight_core.cpp",
+      "git_blob": "f03efc181cc2aa03131c81a8e471985a0d3fdea9",
+      "sha256": "20d1f0d818fe2b5b234e7f54277084bf14e50f3120832814099193720e164c9d",
+      "bytes": 6773,
+      "kind": "text",
+      "lines": 220
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_simulated_motion_backend.cpp",
+      "git_blob": "62d27391b4388d01d9a3c924e2e017bff866bd17",
+      "sha256": "37a42d0264ec79138d8efc4ad2a4d1949e5004aa71388b2df838287b4d92d3ac",
+      "bytes": 2506,
+      "kind": "text",
+      "lines": 65
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_startup_pose_catalog.cpp",
+      "git_blob": "bb87674fd4c1014ea01254baae6dfa2b80506867",
+      "sha256": "96b2c06704c7c56ba650cdc1a867beeb1862b0bc92084db41299b20ed3bfec0b",
+      "bytes": 2320,
+      "kind": "text",
+      "lines": 75
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_startup_pose_gate.cpp",
+      "git_blob": "39c3ae8b215d8ad75fc596a06ef8e709118504d2",
+      "sha256": "bc00d577c35a0b4dfcf9aad05a1c7b42beec203033cb37cff6b4329c1e8efd88",
+      "bytes": 5761,
+      "kind": "text",
+      "lines": 179
+    },
+    {
+      "path": "src/irc_step_motion_executor/test/test_validate_motion_catalog.py",
+      "git_blob": "ad4927b32888eb891fc8f908101eeaf6e4add8b3",
+      "sha256": "d27f73d261eb7b02c0993eac187e169e33824f384fdbe11a417c7901f31252b8",
+      "bytes": 2935,
+      "kind": "text",
+      "lines": 89
+    },
+    {
+      "path": "src/mission_control/README.md",
+      "git_blob": "ca0a1e63a8addcc60bbe0596486f3b2dac1d6e88",
+      "sha256": "2c18ad31ec8ca1e8df9726b9ff5a05ce84ff16fa4f76b25123b3263992c5a4f0",
+      "bytes": 5193,
+      "kind": "text",
+      "lines": 114
+    },
+    {
+      "path": "src/mission_control/docs/MOTION_DECISION_SPEC.md",
+      "git_blob": "823643b10531ae2a9dbb1818a89a96cfbe908c4d",
+      "sha256": "14de43e07d085d528698bdf1684a344e9e478247853c54ab6e4218f58d0b04f7",
+      "bytes": 2465,
+      "kind": "text",
+      "lines": 55
+    },
+    {
+      "path": "src/mission_control/launch/full_system.launch.py",
+      "git_blob": "1d4ba020bcdd88558c3ae3643792dd2fbc3ff20c",
+      "sha256": "0cb49e394388812927e5fd5caa6ccc3fd4cc199f8a818168d0e4e09e5a614383",
+      "bytes": 19238,
+      "kind": "text",
+      "lines": 481
+    },
+    {
+      "path": "src/mission_control/launch/full_system_robot.launch.py",
+      "git_blob": "57005accaac5bd1f148a35081f23c2276d22d06a",
+      "sha256": "b9c21e404d73f505c1e2541c038faafcae1866a08695597fe9ae2d6e9af1db11",
+      "bytes": 19603,
+      "kind": "text",
+      "lines": 472
+    },
+    {
+      "path": "src/mission_control/launch/mission_motion_mock.launch.py",
+      "git_blob": "5be80ff0a5f52d0d7bf312465ec70008bfa9a096",
+      "sha256": "35d8aaff8a5915194d7297bf8ce7df367d4df6f2b22e662a2e0aa1d39bcf5017",
+      "bytes": 4489,
+      "kind": "text",
+      "lines": 118
+    },
+    {
+      "path": "src/mission_control/launch/motion_executor_mock.launch.py",
+      "git_blob": "01e920f279584cd65d63f1ea85737f5bd3d5a64d",
+      "sha256": "eb09f419106efea11bf86cee0331721a1ca8dba44ae6f236baab494ecae2b793",
+      "bytes": 3074,
+      "kind": "text",
+      "lines": 84
+    },
+    {
+      "path": "src/mission_control/mission_control/__init__.py",
+      "git_blob": "5906e5f60b286d085def8620460d4f9494280a64",
+      "sha256": "307a27b2ca7d4898665570ecf0da95e90a6bd388edccfc032ff8f0ca4f0dd885",
+      "bytes": 63,
+      "kind": "text",
+      "lines": 1
+    },
+    {
+      "path": "src/mission_control/mission_control/executor_heartbeat_watchdog.py",
+      "git_blob": "8b8f32e70dabcead61904196f49be20dd0bc921c",
+      "sha256": "4c1876a8962ac0e06c878758d3dbf28e47f2b80b682654f84d95e0edf02fbf7f",
+      "bytes": 2604,
+      "kind": "text",
+      "lines": 80
+    },
+    {
+      "path": "src/mission_control/mission_control/hurdle_line_fusion.py",
+      "git_blob": "51b17789f0b28fef840e75b0708c43f8ee2b9a2b",
+      "sha256": "09b80f11663206619f0b6831547631a74ccd6daf2787cdac79704ad2da2f5fd2",
+      "bytes": 7345,
+      "kind": "text",
+      "lines": 208
+    },
+    {
+      "path": "src/mission_control/mission_control/legacy_motion_executor_adapter.py",
+      "git_blob": "9560e909e22b451e3504d60c6cca6b2b61c9d118",
+      "sha256": "ddc8601cd9deaf5d398584fed2523b4bd5e60204226a0f046f106d4b59b48f00",
+      "bytes": 5974,
+      "kind": "text",
+      "lines": 212
+    },
+    {
+      "path": "src/mission_control/mission_control/legacy_motion_status_adapter.py",
+      "git_blob": "72884298cef37862a18ad7ca37ff20ab45780e08",
+      "sha256": "2613aab55928f240b8e25ed83744566c452e2953260046db79848f6cdb1d02e7",
+      "bytes": 5114,
+      "kind": "text",
+      "lines": 170
+    },
+    {
+      "path": "src/mission_control/mission_control/mission_phase_manager.py",
+      "git_blob": "56b6b69224477ef4eba6d4e13293b0e6cf228f4d",
+      "sha256": "99766c99a5cd4858b8f158b7c056dcb578743950d0cb40fb756441fb70c81894",
+      "bytes": 15227,
+      "kind": "text",
+      "lines": 443
+    },
+    {
+      "path": "src/mission_control/mission_control/mock_mission_input_node.py",
+      "git_blob": "99d1b6356cbd943278dc4b53eda18806b0c9983e",
+      "sha256": "0f6493f69b7209e4a9d33710cf97345579d89f0a1a46cd375575f3e39872c868",
+      "bytes": 4048,
+      "kind": "text",
+      "lines": 134
+    },
+    {
+      "path": "src/mission_control/mission_control/mock_motion_player.py",
+      "git_blob": "279112babfcd0feb460a25b3bf56e7d1de58e76a",
+      "sha256": "8c579255fbf31f1a1c8a92d526382bf838dfee972cdbc9c5d4904142a2e6f585",
+      "bytes": 4849,
+      "kind": "text",
+      "lines": 165
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_command_bridge_node.py",
+      "git_blob": "3312ffaac8dbab9acf30d789d72b65c3dd84f10e",
+      "sha256": "8fb0a1e57003e7d2c767ab446230974132bd94b0e567663c6d065411b52e91ca",
+      "bytes": 55522,
+      "kind": "text",
+      "lines": 1447
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_command_gate.py",
+      "git_blob": "de46d51bd34cfeb58f325af2c47aa6137c3cec2a",
+      "sha256": "e65a5797022dab7f8a608e12a73da22943c5491ba643e77e4f29bc1a3b9ae38f",
+      "bytes": 8679,
+      "kind": "text",
+      "lines": 277
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_decision_node.py",
+      "git_blob": "c2c16073ea0b2355e0ac2087893ae8e6ad68d53b",
+      "sha256": "06fc824f5ad12fdf30cef484a3d631f1f121edf39cbf8694650d7870c37d7fbd",
+      "bytes": 119099,
+      "kind": "text",
+      "lines": 3154
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_decision_planner.py",
+      "git_blob": "c990bcbfb6d0bfe89e97b5a3781bb7122ad426b1",
+      "sha256": "061b3d3f335cc931ed163128b32ab5c6b7a4b2b68a880d16942fc12d15b10b93",
+      "bytes": 71145,
+      "kind": "text",
+      "lines": 1879
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_executor_core.py",
+      "git_blob": "ff5643da4341cc3cd131425dd562942443982c35",
+      "sha256": "496107850468d6919ff1f9a25a83104b2781f2999998de5d5b8462c5b6d017d3",
+      "bytes": 8635,
+      "kind": "text",
+      "lines": 279
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_executor_node.py",
+      "git_blob": "a9efe76a640c4576c6cd1f62798de6852cebabc8",
+      "sha256": "dbf93460207274f3e8e9898d89e7d9637c4135ce9295469e1c9dcf797c7c0e1c",
+      "bytes": 14295,
+      "kind": "text",
+      "lines": 461
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_player_factory.py",
+      "git_blob": "ba5b8a309fc180f253b5e90cf857090c9113abbb",
+      "sha256": "71c13cd0292ae1870b463adc7bda8959c04d59a956cfdcc8d2013b92e0c8f739",
+      "bytes": 1496,
+      "kind": "text",
+      "lines": 42
+    },
+    {
+      "path": "src/mission_control/mission_control/motion_player_protocol.py",
+      "git_blob": "eac6ce354129b5a48eaf6cb56b6e8c8032ca497c",
+      "sha256": "78214f16658a9b6df39c8323453261c4cd899b47fdea5177ed919389234cfc13",
+      "bytes": 662,
+      "kind": "text",
+      "lines": 37
+    },
+    {
+      "path": "src/mission_control/mission_control/safety_interlock.py",
+      "git_blob": "7698377cc3c8e07f4204455fc7b73e1ea69438d6",
+      "sha256": "fc949dde706fc4486f2d595f3584b5a2debbedcda05128e4faba43877e8fbb9f",
+      "bytes": 3599,
+      "kind": "text",
+      "lines": 132
+    },
+    {
+      "path": "src/mission_control/mission_control/sdk_motion_player_placeholder.py",
+      "git_blob": "d21eec4c7dd8cb054147dd2902cade0df37a91ed",
+      "sha256": "4329d43b6aafd77626ef7c5ace4228c73273c06b4cf63ee7936829b5c29e7968",
+      "bytes": 1302,
+      "kind": "text",
+      "lines": 57
+    },
+    {
+      "path": "src/mission_control/mission_control/sdk_motion_stub_node.py",
+      "git_blob": "4e85b623a1c52fc64fe3b9df1577cf56a0dd0dfb",
+      "sha256": "40e0079287e2cd58a5070bd9cc7d368a4bf3b3502cf32caa8ecd81a3c3d26457",
+      "bytes": 6039,
+      "kind": "text",
+      "lines": 225
+    },
+    {
+      "path": "src/mission_control/package.xml",
+      "git_blob": "1d7f12c5ad5eda8357a72ee551b9f3734bdce973",
+      "sha256": "f1a85c6ddc219b6f16d6ab51e2f3b24af7b3962b71f520fcf492c4207553b12f",
+      "bytes": 1012,
+      "kind": "text",
+      "lines": 28
+    },
+    {
+      "path": "src/mission_control/resource/mission_control",
+      "git_blob": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "bytes": 1,
+      "kind": "text",
+      "lines": 1
+    },
+    {
+      "path": "src/mission_control/setup.cfg",
+      "git_blob": "5bc1b443c54beb64da7daf802c5ae322c8098999",
+      "sha256": "28cd4630381c7f5ce658e87d77a148a856e97702d2d88a87da13ab29f35e8389",
+      "bytes": 186,
+      "kind": "text",
+      "lines": 9
+    },
+    {
+      "path": "src/mission_control/setup.py",
+      "git_blob": "da3398d35c6a89c1721a11db98c67376cc7ae598",
+      "sha256": "146d58a2dd4218a3139ea3fbaa3e7d3ff73b0d9bfee8ac54a7b8adad136eb412",
+      "bytes": 1600,
+      "kind": "text",
+      "lines": 50
+    },
+    {
+      "path": "src/mission_control/test/test_executor_heartbeat_watchdog.py",
+      "git_blob": "37c6e5482d566152de44f105d42df16692c47d36",
+      "sha256": "c3178e140e37e3144a22b87fd2c428eb28224fc7ad990328ec0f194989b81daf",
+      "bytes": 1850,
+      "kind": "text",
+      "lines": 59
+    },
+    {
+      "path": "src/mission_control/test/test_flake8.py",
+      "git_blob": "0863d3813d8a99c5f05b00900602a41acc718345",
+      "sha256": "e322c1168ec7de3f545e234f2875777fe96ae6023724b41c3237abf9fe4bfd55",
+      "bytes": 732,
+      "kind": "text",
+      "lines": 28
+    },
+    {
+      "path": "src/mission_control/test/test_full_system_launch.py",
+      "git_blob": "cca3e35be2a64e9c6ee51cef6d15a1682581daa8",
+      "sha256": "9c0968250be1a1453906b2508396bea34ad39d6863f1acedfbee3210e179c76c",
+      "bytes": 7449,
+      "kind": "text",
+      "lines": 229
+    },
+    {
+      "path": "src/mission_control/test/test_full_system_robot_launch.py",
+      "git_blob": "ea48a3b01e0f78b5cabe84292e1321757edba0cc",
+      "sha256": "a4441a43bcad57ece77a61499a63abaff87085c7fd0b0cf599e1d54987b1d205",
+      "bytes": 5377,
+      "kind": "text",
+      "lines": 169
+    },
+    {
+      "path": "src/mission_control/test/test_hurdle_line_fusion.py",
+      "git_blob": "036636c4020c2ba6ca475186692f5a203d2ff7ea",
+      "sha256": "beddbd79c0b686638f9013e2e15c677775e5efff431054abe254da7920974536",
+      "bytes": 1926,
+      "kind": "text",
+      "lines": 57
+    },
+    {
+      "path": "src/mission_control/test/test_legacy_catalog_contract.py",
+      "git_blob": "2ef50bcd42f70593464a60ce6ce015d242e6222d",
+      "sha256": "a6af3f7175cd82a663a355901f8cb76b5b9e97928eb1185f07d9d467aae6584e",
+      "bytes": 3465,
+      "kind": "text",
+      "lines": 113
+    },
+    {
+      "path": "src/mission_control/test/test_legacy_motion_executor_adapter.py",
+      "git_blob": "2840d1bc4e2bde92f17de36cb8ae0d13a2258429",
+      "sha256": "a4e4b7fd2581c60a5b1ae79e398b16b1cb7c9738ee38368531e5cb3a7540a6da",
+      "bytes": 6713,
+      "kind": "text",
+      "lines": 234
+    },
+    {
+      "path": "src/mission_control/test/test_legacy_motion_status_adapter.py",
+      "git_blob": "47ffe8bd4d729388a9a0d6d42e1fd6c21bd39068",
+      "sha256": "f0387655f82f62076dce8134ac88b9a4fc4e5b9acb84f070e741a5a22782b593",
+      "bytes": 4040,
+      "kind": "text",
+      "lines": 145
+    },
+    {
+      "path": "src/mission_control/test/test_mission_motion_mock_launch.py",
+      "git_blob": "1292ce2ee5c965e5cee1cc7c36d0009e3cc9b75b",
+      "sha256": "f458088384982c3b6605e44e4afb69f83296c46fd27fd1530184a00e26049f7c",
+      "bytes": 2917,
+      "kind": "text",
+      "lines": 101
+    },
+    {
+      "path": "src/mission_control/test/test_mission_phase_flow.py",
+      "git_blob": "a5176851d770ba5c78d78b86e88c20b202aa9688",
+      "sha256": "5bd35462a176b1a9cf510ef2d5cc491da121a07a8d15e027a3f77340f17fa0a6",
+      "bytes": 61239,
+      "kind": "text",
+      "lines": 1978
+    },
+    {
+      "path": "src/mission_control/test/test_mission_phase_manager.py",
+      "git_blob": "9423778cc240f7c6d247d595d1bdb9344a0f275a",
+      "sha256": "02da94c11837bfd691877bf06335cdbbc04480df963876e8a47f24c5e9676449",
+      "bytes": 20291,
+      "kind": "text",
+      "lines": 607
+    },
+    {
+      "path": "src/mission_control/test/test_mock_mission_input_node.py",
+      "git_blob": "fc7928779f939766a912c293fdd5e68d936e468c",
+      "sha256": "5ef9b73435f18cceeb1b5611a9c4de90d7f1fbde4b82cc103a009eb779293491",
+      "bytes": 3277,
+      "kind": "text",
+      "lines": 114
+    },
+    {
+      "path": "src/mission_control/test/test_mock_motion_player.py",
+      "git_blob": "7e529f7bad0cdd37a8a604ad8edadfe8529d1ee7",
+      "sha256": "fcd6793a4a748416c98a549a5bf2ce007a6ccdd6457ad9a75b35e560559fa157",
+      "bytes": 2557,
+      "kind": "text",
+      "lines": 81
+    },
+    {
+      "path": "src/mission_control/test/test_motion_command_bridge.py",
+      "git_blob": "2ac81384938df850f2d93c73b9e8101e19a8ebf2",
+      "sha256": "92113560ac9d317e82e6459cfb644b65b940f4345fe86212a0aa3f1177eccb32",
+      "bytes": 57970,
+      "kind": "text",
+      "lines": 1765
+    },
+    {
+      "path": "src/mission_control/test/test_motion_command_gate.py",
+      "git_blob": "145cc8a97bfad91a675b601f9bbc5dc3a64c1f8b",
+      "sha256": "f938c5a8b58374e5bfbb928797c0b4cea3886705552b4f7aadac1663384548e3",
+      "bytes": 10326,
+      "kind": "text",
+      "lines": 375
+    },
+    {
+      "path": "src/mission_control/test/test_motion_decision_node.py",
+      "git_blob": "6081b562568494c76dbb900f77d7eeaf45047a6d",
+      "sha256": "8a30f1b5082436cc6b5bc71ca8146a41f70325b273a6a9bd99ae2606842a0923",
+      "bytes": 115707,
+      "kind": "text",
+      "lines": 3737
+    },
+    {
+      "path": "src/mission_control/test/test_motion_decision_planner.py",
+      "git_blob": "6f9d2980c3714078f1a149f373b31ca2f24dd2e5",
+      "sha256": "250d94d1d714f4f6dd03444e60ef9a756522f200c3191e3a1c70d43c2613675d",
+      "bytes": 61089,
+      "kind": "text",
+      "lines": 2233
+    },
+    {
+      "path": "src/mission_control/test/test_motion_executor_core.py",
+      "git_blob": "059ab4f935cc8d77719822a625c36be5aac4c0ac",
+      "sha256": "f82689f8dd367ec24be1f099b3210c3f2a2fc96be79915d4f07e939656d0fe48",
+      "bytes": 8223,
+      "kind": "text",
+      "lines": 278
+    },
+    {
+      "path": "src/mission_control/test/test_motion_executor_mock_launch.py",
+      "git_blob": "25f57a9ea471ea0f301e67e0184cb287d70a0d0c",
+      "sha256": "d508c7bc116be0223773abdea193dec15ce71e90f6415010cc1e2813b0f423d2",
+      "bytes": 2237,
+      "kind": "text",
+      "lines": 73
+    },
+    {
+      "path": "src/mission_control/test/test_motion_executor_node.py",
+      "git_blob": "f9ce6899ca4184c10e7156dc1e677da53c648cdb",
+      "sha256": "57a889dcdb0003f4b61e35d0e51977f3f6d5fd2882204a933ba9f7d9ac332650",
+      "bytes": 9170,
+      "kind": "text",
+      "lines": 294
+    },
+    {
+      "path": "src/mission_control/test/test_motion_player_factory.py",
+      "git_blob": "6d9997a60c194bdd1ecaefb98d2297686b0494cd",
+      "sha256": "00af221c4fe05598b9c4eb3bb03ac86c9146426e8e9a7fc6ebc2704d9b63be65",
+      "bytes": 2159,
+      "kind": "text",
+      "lines": 68
+    },
+    {
+      "path": "src/mission_control/test/test_pep257.py",
+      "git_blob": "2b67ce0a58e84d5c5f28838e7d34d0726ad52689",
+      "sha256": "aace9b8132dbee92042cfaf29a3da8622c06a5166faf0de360009f2693498227",
+      "bytes": 193,
+      "kind": "text",
+      "lines": 9
+    },
+    {
+      "path": "src/mission_control/test/test_production_motion_catalog_contract.py",
+      "git_blob": "a063df2e52addbb7c1cde692de8997cc80cb735b",
+      "sha256": "e45d3c103a6433cbbec19eb9a1696d973e1747c7606358f7d95577dee0ebcf52",
+      "bytes": 11905,
+      "kind": "text",
+      "lines": 305
+    },
+    {
+      "path": "src/mission_control/test/test_safety_interlock.py",
+      "git_blob": "04dcf95592b9ca27bc4282c06afbb0b4e64f92c3",
+      "sha256": "98018b5cfece4b39acb61f4b0b9a2bd3e83527722b74ccba99e3a1927a043e79",
+      "bytes": 2169,
+      "kind": "text",
+      "lines": 68
+    },
+    {
+      "path": "src/mission_control/test/test_sdk_motion_stub_node.py",
+      "git_blob": "93d4e744036b5fb33cf357339641c139decfeb1d",
+      "sha256": "fba8c72e2d23a06b5f1c4ba79c3823bb3216655778c69ee388aa5fcb6f64228f",
+      "bytes": 4199,
+      "kind": "text",
+      "lines": 179
+    },
+    {
+      "path": "src/step/launch/ball_only_debug.launch.py",
+      "git_blob": "3289a3ec42c9062a4375fac486abb3841dce3302",
+      "sha256": "9a8ea4a318b472ebdee30545cca999a8719780172e3bcc87fc7a322db3e35867",
+      "bytes": 3153,
+      "kind": "text",
+      "lines": 89
+    },
+    {
+      "path": "src/step/models/best.engine",
+      "git_blob": "ca6a9389c66c9ba736bed5966de7a3b7bdf742e2",
+      "sha256": "b573d26515da64c2fdf31b329bfea653991922182f4d524604887afb3cac4c12",
+      "bytes": 8406252,
+      "kind": "vision model binary",
+      "lines": null
+    },
+    {
+      "path": "src/step/models/best.onnx",
+      "git_blob": "0f7f0a7f72d2d4730fb716753cd2f52486c0e8cb",
+      "sha256": "1a84bc2c7e9779b93cea9d11fb437d64ff7fa03f28d3cadc6cebd945f9c272f4",
+      "bytes": 9809163,
+      "kind": "vision model binary",
+      "lines": null
+    },
+    {
+      "path": "src/step/package.xml",
+      "git_blob": "771b9b61c925f329fc126eba076f19192aa80967",
+      "sha256": "bfc571267cd0a84c34c92a42f22725939cf7ddb87ed72920d4fb8f5f59c5a9f1",
+      "bytes": 924,
+      "kind": "text",
+      "lines": 27
+    },
+    {
+      "path": "src/step/resource/step",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "kind": "text",
+      "lines": 0
+    },
+    {
+      "path": "src/step/setup.cfg",
+      "git_blob": "ab421467d1cc4ee17c6a4f82a9c9af5f3c8fd5f9",
+      "sha256": "3927686333181d1b0524627cfa8de00ac524c2458287a26022b606d0454a6316",
+      "bytes": 77,
+      "kind": "text",
+      "lines": 4
+    },
+    {
+      "path": "src/step/setup.py",
+      "git_blob": "a56d84be5ea37ad1654fc0ff7015fd5a138bb79d",
+      "sha256": "3d0cf7cebe81c5f9c35176677e91730d1261a86c4b9125d1bcf0777aaffe8399",
+      "bytes": 2386,
+      "kind": "text",
+      "lines": 65
+    },
+    {
+      "path": "src/step/step/__init__.py",
+      "git_blob": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "kind": "text",
+      "lines": 0
+    },
+    {
+      "path": "src/step/step/approach_distance.py",
+      "git_blob": "203b936439f1059b7768a1c6fd35dee1fb724da5",
+      "sha256": "45e10a213e94b2c9efc780f46ba9e1ef481c0751d666c13d0e6cb59c374d14a4",
+      "bytes": 1414,
+      "kind": "text",
+      "lines": 46
+    },
+    {
+      "path": "src/step/step/ball_analyzer.py",
+      "git_blob": "46a9bd879d8c2166f7629b60ae29a96a9ed6d4c6",
+      "sha256": "6a39895f1ffe610a79fb3a7eed71f6a0eed7aee3171add87a18c8fc8939d48ee",
+      "bytes": 52271,
+      "kind": "text",
+      "lines": 1444
+    },
+    {
+      "path": "src/step/step/ball_navigation_controller.py",
+      "git_blob": "65959fe0c2ce05cbcd99a5bc9d4231d2f60dc26e",
+      "sha256": "eaeaea6f0c60dfe0be88b719489da18b12a58934d4d8322672b93d1e85c1d1e0",
+      "bytes": 7697,
+      "kind": "text",
+      "lines": 199
+    },
+    {
+      "path": "src/step/step/ball_navigation_planner.py",
+      "git_blob": "e1aa913361425d25e262e52396c6309d75b07e00",
+      "sha256": "2af94a1ad785ab9b40ffa291229365b2768c16620abdd0495f7d80c22049864c",
+      "bytes": 16118,
+      "kind": "text",
+      "lines": 472
+    },
+    {
+      "path": "src/step/step/ball_only_debug.py",
+      "git_blob": "2818839a1f468031cb56f216e19c3a8f151d9879",
+      "sha256": "d64b8f0b279ea9638c77fe16e730752276418ed8bb3dd67436cc7fce920ecf1e",
+      "bytes": 16299,
+      "kind": "text",
+      "lines": 447
+    },
+    {
+      "path": "src/step/step/depth_frame_cache.py",
+      "git_blob": "668e90f5cf35b606d699da02ea630d1dab9387a7",
+      "sha256": "20dc311a0e276ff250f7737a49e98465ed291dbddf387e802ef87653699923c3",
+      "bytes": 7156,
+      "kind": "text",
+      "lines": 230
+    },
+    {
+      "path": "src/step/step/goal_analyzer.py",
+      "git_blob": "2a0d935440c93d87dd9803396b7c7e7f012aa552",
+      "sha256": "5fdc827ef98b3c8c4718a0994056b39220db0324d93e374002fccb8bf5660127",
+      "bytes": 30476,
+      "kind": "text",
+      "lines": 854
+    },
+    {
+      "path": "src/step/step/goal_navigation_controller.py",
+      "git_blob": "6b48b8ae54467e24893ccd77bc6d596650123ca2",
+      "sha256": "eede06cf3f6acc347f0dfaa99feed4644e9de49dc9e68c6861850d75f5959970",
+      "bytes": 5017,
+      "kind": "text",
+      "lines": 141
+    },
+    {
+      "path": "src/step/step/goal_navigation_planner.py",
+      "git_blob": "2bcc1812fc86c1cb5fd36f7124681a62c8069657",
+      "sha256": "60715ef61dcead7b300c34cef0f7eaed2d5bae5f36d737146e151d1f358771ec",
+      "bytes": 6323,
+      "kind": "text",
+      "lines": 184
+    },
+    {
+      "path": "src/step/step/hurdle_analyzer.py",
+      "git_blob": "aebea1b2d2857c57c3881e7ccafbdac716daf209",
+      "sha256": "fe60de7e6e3c88550d0dbab0c24523ff36946c3e66a787cb65bd1bdb0b60ab96",
+      "bytes": 30958,
+      "kind": "text",
+      "lines": 854
+    },
+    {
+      "path": "src/step/step/hurdle_navigation_controller.py",
+      "git_blob": "e17b7213f26b76e63536e1c4073c0f489dec53e8",
+      "sha256": "fd8d184098133973c1742d7717d535dec4146c597bb68efcbaaba53e11cd7de5",
+      "bytes": 5005,
+      "kind": "text",
+      "lines": 147
+    },
+    {
+      "path": "src/step/step/hurdle_navigation_planner.py",
+      "git_blob": "5d92aa53f17d5ae243afc1ce53a4e7d755154982",
+      "sha256": "25b88078ac5f29fcbdca70d270a080b953510a5e28f6143c3f0382c028cc15ad",
+      "bytes": 7732,
+      "kind": "text",
+      "lines": 226
+    },
+    {
+      "path": "src/step/step/imu_line_pose_estimator.py",
+      "git_blob": "9ed91c8499639c8b9089f224273eb1d6f32bcacd",
+      "sha256": "82eb535e97015687cb7be26d4689065fa73f289868fa6391585d53e3f3c51afa",
+      "bytes": 31017,
+      "kind": "text",
+      "lines": 860
+    },
+    {
+      "path": "src/step/step/line_debug_monitor.py",
+      "git_blob": "6445b5cfa5c45246ca42588f9bfd676000831770",
+      "sha256": "6d28228493c8b375916b853470926e65e5910d66d1af65999c701065b6ab20f6",
+      "bytes": 9724,
+      "kind": "text",
+      "lines": 483
+    },
+    {
+      "path": "src/step/step/line_navigation_controller.py",
+      "git_blob": "0497759148880161fbd90c14c8f58ed9f406f868",
+      "sha256": "963cba7d6b08a27ece99127bc131a0a30492cc86cc2858aeeafa18c8bf96965e",
+      "bytes": 8871,
+      "kind": "text",
+      "lines": 224
+    },
+    {
+      "path": "src/step/step/line_navigation_planner.py",
+      "git_blob": "f3fa65c91856eb62c5d22e4d5673d24685bbb06b",
+      "sha256": "07322461acc10aaac35fc697c139421de5406f19eb88ff6ae28f809e9402ecea",
+      "bytes": 25490,
+      "kind": "text",
+      "lines": 695
+    },
+    {
+      "path": "src/step/step/line_path_visualizer.py",
+      "git_blob": "cb0d726451ab5c744d10bc1b67d1a39733495b21",
+      "sha256": "46ff3805f495adc2d3709e6e6495cdc52f43c64a06eb54d2c2d0037f26c4fa3b",
+      "bytes": 32944,
+      "kind": "text",
+      "lines": 1320
+    },
+    {
+      "path": "src/step/step/mission_map_visualizer.py",
+      "git_blob": "6dcd7340126166ff44e53e0a6a25da2f13019cd5",
+      "sha256": "e9db1389286db87a5e29fa815321001da3516634165feeda6fab6bc9f1e7d8ab",
+      "bytes": 23127,
+      "kind": "text",
+      "lines": 812
+    },
+    {
+      "path": "src/step/step/mission_state_estimator.py",
+      "git_blob": "8358b4eaeeb195bd7adce53f1fbbf382f5e09a82",
+      "sha256": "aa6945df774b6e17780cd415b1cf6143848543bab6bf91e51058dec20d646668",
+      "bytes": 13818,
+      "kind": "text",
+      "lines": 476
+    },
+    {
+      "path": "src/step/step/rgbd_visual_odometry.py",
+      "git_blob": "ec95745b22edb5164d6f478caa74de31e9a3a484",
+      "sha256": "e5a90d6c55b40efa028620dfafcd074473fcc96eeb4f94721418a3769580f126",
+      "bytes": 23895,
+      "kind": "text",
+      "lines": 665
+    },
+    {
+      "path": "src/step/step/step_motion_pose_test.py",
+      "git_blob": "d5a0635e502bb16d461f3f9c36905dc12e71fb76",
+      "sha256": "d9c9a2fed8c603f60412942179f2fa7bb124ace818295bc8acc4d0a1e9461f97",
+      "bytes": 13769,
+      "kind": "text",
+      "lines": 389
+    },
+    {
+      "path": "src/step/step/temporal_confirmation.py",
+      "git_blob": "da76517c370b01f52c023db56c3d8d48e24f2efb",
+      "sha256": "572a2f1cdcc4db4341d1103adf16e54596ecc1e1cf43beb7c5a366c0e268d1c1",
+      "bytes": 6621,
+      "kind": "text",
+      "lines": 193
+    },
+    {
+      "path": "src/step/step/tensorrt_backend.py",
+      "git_blob": "2a8e12a61ec64c44d87179a231740f790289b0d8",
+      "sha256": "407d6443ba2e5a73bb1a3d42968ad24a7b0d2d66a27b53e1f1c5839b954f2f55",
+      "bytes": 10631,
+      "kind": "text",
+      "lines": 313
+    },
+    {
+      "path": "src/step/step/unified_vision_node.py",
+      "git_blob": "53c860358b6c9fbb06b52efa41d5364fb92a3d9d",
+      "sha256": "0b607a131a1cd0231acd253ee76536e7be374480ab1824b91500d8c5c7edec6a",
+      "bytes": 1842,
+      "kind": "text",
+      "lines": 55
+    },
+    {
+      "path": "src/step/step/yolo26_detector.py",
+      "git_blob": "cfe82e55958970b90f7db765e00a2cd8f70adbab",
+      "sha256": "cd6123d3ef8f74e50c9ec3357cf81196e126793adc75f0cbf9d8e39a01e1f7a2",
+      "bytes": 109850,
+      "kind": "text",
+      "lines": 3015
+    },
+    {
+      "path": "src/step/step/yolo_line_analyzer.py",
+      "git_blob": "bccfb86f61dbd276b2a89dcff51515a61241205b",
+      "sha256": "84321b8755f1f128d7ef8121c88544693a8c90e1a026d16db9a4d8bc68102133",
+      "bytes": 101403,
+      "kind": "text",
+      "lines": 3979
+    },
+    {
+      "path": "src/step/test/test_approach_distance.py",
+      "git_blob": "9f11af5f191e2135af602efa484fe6dc3046a8d8",
+      "sha256": "56de9b87ea55a6c81965dede56ac9d27629796692f56c95d3746b685f10d795c",
+      "bytes": 775,
+      "kind": "text",
+      "lines": 28
+    },
+    {
+      "path": "src/step/test/test_ball_analyzer_depth_separation.py",
+      "git_blob": "ef8f83e55fcc32d949c934ff79c803b6a78e5c91",
+      "sha256": "163ff2d752cb720178ebf3268c80ff6f8a821c052d78cdb50243d9a8b27ab7a9",
+      "bytes": 10758,
+      "kind": "text",
+      "lines": 333
+    },
+    {
+      "path": "src/step/test/test_ball_navigation_planner.py",
+      "git_blob": "5701498307bb8d60bf18094a3778ac9201b34f37",
+      "sha256": "4f33d5dacc5c275cd78a3028b538b9702346e457235bf859bf6e6cdddf73d678",
+      "bytes": 11347,
+      "kind": "text",
+      "lines": 453
+    },
+    {
+      "path": "src/step/test/test_ball_only_debug.py",
+      "git_blob": "7cb87b8448081edf76923eae63c0d7a829af56c7",
+      "sha256": "c7b55078c7c472061d86db4e7657d624a6f16a718169e39516e0a358a4be481d",
+      "bytes": 1079,
+      "kind": "text",
+      "lines": 37
+    },
+    {
+      "path": "src/step/test/test_copyright.py",
+      "git_blob": "97a39196e84db97954341162a6d2e7f771d938c0",
+      "sha256": "ea71bbbc6247b5c14d176ed09f39ee274d563cc9b2ec355828ea451ceff31757",
+      "bytes": 962,
+      "kind": "text",
+      "lines": 25
+    },
+    {
+      "path": "src/step/test/test_depth_frame_cache.py",
+      "git_blob": "173cd40bbc19609a6940b5c8544f9692e4a326a6",
+      "sha256": "78138085dce603856636bb2aa1e5aac1c862a9a74c62ef673eb0d1b4f6f27c88",
+      "bytes": 3286,
+      "kind": "text",
+      "lines": 112
+    },
+    {
+      "path": "src/step/test/test_flake8.py",
+      "git_blob": "27ee1078ff077cc3a0fec75b7d023101a68164d1",
+      "sha256": "37a813a0507f0ce51a2d0b57312d2cc078a0307a3ca85580ea801b0d2f9755d2",
+      "bytes": 884,
+      "kind": "text",
+      "lines": 25
+    },
+    {
+      "path": "src/step/test/test_goal_ground_distance.py",
+      "git_blob": "baf21e1dc79a060674552d1804216b5bbe122485",
+      "sha256": "7f451bc3da799cccaf2d8351988432cc60473521285fcb2d366976349a2dd21f",
+      "bytes": 533,
+      "kind": "text",
+      "lines": 18
+    },
+    {
+      "path": "src/step/test/test_goal_navigation_planner.py",
+      "git_blob": "f2b3c7ddfacb6dfc56893f36e53db468908a1995",
+      "sha256": "249da6821c50bc075b2d4ed1fcea5542de3edd5853979468bfd2b53a620cef5d",
+      "bytes": 3531,
+      "kind": "text",
+      "lines": 119
+    },
+    {
+      "path": "src/step/test/test_hurdle_analyzer_depth_separation.py",
+      "git_blob": "6aa47938b1e0d87f798f8eecaec74ca909654f69",
+      "sha256": "655ff89efdcc76d8766b51dde24e1e210e64495638493532785f3fe15d1216f9",
+      "bytes": 1242,
+      "kind": "text",
+      "lines": 39
+    },
+    {
+      "path": "src/step/test/test_hurdle_analyzer_detection_policy.py",
+      "git_blob": "819dbca4fe145b3a751e5b7e944382be21e47b2d",
+      "sha256": "d1ff9cc64d4036e3805544a909b2dc6494e912a14190f422a8b315803fd10e52",
+      "bytes": 4831,
+      "kind": "text",
+      "lines": 139
+    },
+    {
+      "path": "src/step/test/test_hurdle_navigation_planner.py",
+      "git_blob": "bdd710b4ee6e159430d21a99af9b163586948f85",
+      "sha256": "0af507ad89cc870b9c098f5ead3cb98c04342b89c0c766b180a918fa97078e83",
+      "bytes": 3543,
+      "kind": "text",
+      "lines": 140
+    },
+    {
+      "path": "src/step/test/test_line_center_calibration.py",
+      "git_blob": "b6c15a01d1b281b00634b7c80d32e1f27b02f0f6",
+      "sha256": "69c9733876aa3264e22f9dae3cf5849175249ae8f75f735f3f9c1aefd87d949c",
+      "bytes": 2393,
+      "kind": "text",
+      "lines": 77
+    },
+    {
+      "path": "src/step/test/test_line_navigation_planner.py",
+      "git_blob": "b45fa887563a3a4d7f47abe0ad0da1478f3637fb",
+      "sha256": "4408c2dd2c7cc355d2c253adbf1ce93e27118cc74a5a5e3d4b2a7af2514c2f10",
+      "bytes": 18846,
+      "kind": "text",
+      "lines": 701
+    },
+    {
+      "path": "src/step/test/test_pep257.py",
+      "git_blob": "b234a3840f4c5bd38f043638c8622b8f240e1185",
+      "sha256": "e8b88d49ee296987b1b40069f81019b5fa09b1aa1bfee9a1faae45bb5cf53eda",
+      "bytes": 803,
+      "kind": "text",
+      "lines": 23
+    },
+    {
+      "path": "src/step/test/test_temporal_confirmation.py",
+      "git_blob": "1dc173ed67a2999b632d6bac2367bcda6a1fffff",
+      "sha256": "c0e65731f7079214ece6df127b718f42dddad4cb2a86b3081344ea25b6cd12eb",
+      "bytes": 3787,
+      "kind": "text",
+      "lines": 132
+    },
+    {
+      "path": "src/step/test/test_tensorrt_backend.py",
+      "git_blob": "dd1ee50b542de8ff16ff729e24495145593d20d3",
+      "sha256": "57f1b25f889360a34bcc09c5f0c314a4df293462c4402ea1c15127335773d843",
+      "bytes": 499,
+      "kind": "text",
+      "lines": 15
+    },
+    {
+      "path": "src/step/test/test_yolo26_detector.py",
+      "git_blob": "11ff846586acd0fe58b145a224123ae874369765",
+      "sha256": "d2b69141b797c5b9936553c29c1fd4e56d41dc3799473b861b7edc5feb551672",
+      "bytes": 11130,
+      "kind": "text",
+      "lines": 348
+    },
+    {
+      "path": "tools/export_gui_motion_candidates.py",
+      "git_blob": "f08f6d921685ce11e4d2a4821030253c8dc924c9",
+      "sha256": "92be1f920553e394780b150990b835e3bfe294c1243b73619cc64be2a5cca373",
+      "bytes": 9668,
+      "kind": "text",
+      "lines": 252
+    },
+    {
+      "path": "tools/test_export_gui_motion_candidates.py",
+      "git_blob": "4b06362c8996d0efcf3160507ad61fb10c88dc4e",
+      "sha256": "07cde0178493b22c42fe7400d247eeb744a467ba1adbef47c3cf7aaf8ae3ab26",
+      "bytes": 5078,
+      "kind": "text",
+      "lines": 138
+    },
+    {
+      "path": "tools/upsert_motion_catalog.py",
+      "git_blob": "49cc0667380dc65436b2092a55beaae2d564c65d",
+      "sha256": "1434dc910d8368a95c9a5af30266c0689acd8b5b99de7884d7619c66a4a41b44",
+      "bytes": 5281,
+      "kind": "text",
+      "lines": 147
+    }
+  ]
+}

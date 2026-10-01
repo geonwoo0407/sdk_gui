@@ -1,0 +1,245 @@
+{
+  "snapshot_time": "2026-09-30T13:54:48.590850+09:00",
+  "source_root": "/home/rnd_3/final step",
+  "git_head": "72a52243ec7eee737ec52c43bdbdda0f724e94b7",
+  "git_last_commit": "2026-08-29T23:51:11+09:00\nUpdate motion state and add SDK archive",
+  "working_tree_status_before_bundle": " M SDK_HANDOFF.md\n M robot_motion_player.cpp\n M robot_motion_player.hpp\n M robot_motions.json\n M sdk_gui.py\n M sdk_gui_state.json\n M test_robot_motion_player.cpp\n?? diagnose_mx_bus.py\n?? diagnostics/\n?? handoff/\n?? jetson_reference/\n?? sdk_gui_timing_repairs.json\n?? test_diagnose_mx_bus.py\n?? test_sdk_gui_composer_timeline.py\n?? test_sdk_gui_precision.py\n?? test_sdk_gui_timed_playback.py\n",
+  "revision_note": "Working-tree snapshot with uncommitted edits; git_head alone does not reproduce it.",
+  "original_source_files": {
+    "gui/sdk_gui.py": {
+      "source_path": "/home/rnd_3/final step/sdk_gui.py",
+      "bytes": 342821,
+      "sha256": "5f510f76fb1eb7bd2c29f959026994d5365141bdf8f1e1a941cdf90bf5ed3f25",
+      "source_mtime": "2026-09-23T14:59:36.975703+09:00"
+    },
+    "gui/sdk_gui_state.json": {
+      "source_path": "/home/rnd_3/final step/sdk_gui_state.json",
+      "bytes": 4306773,
+      "sha256": "4828a10191b5b79acc8c606be11bf6f557b7859d41dd7d971e43757e502005ad",
+      "source_mtime": "2026-09-30T13:49:29.664498+09:00"
+    },
+    "gui/sdk_gui_timing_repairs.json": {
+      "source_path": "/home/rnd_3/final step/sdk_gui_timing_repairs.json",
+      "bytes": 1178,
+      "sha256": "10761ed37d8ac7882993f9414262948bf09dd861c69eb2bc5f258e467e014b7e",
+      "source_mtime": "2026-09-22T14:35:59.916959+09:00"
+    },
+    "gui/test_sdk_gui_timed_playback.py": {
+      "source_path": "/home/rnd_3/final step/test_sdk_gui_timed_playback.py",
+      "bytes": 9022,
+      "sha256": "366d637860617aa8403c9738539035145f8aeb89066cfb5b705502ec4971bc32",
+      "source_mtime": "2026-09-22T14:32:56.344968+09:00"
+    },
+    "gui/test_sdk_gui_composer_timeline.py": {
+      "source_path": "/home/rnd_3/final step/test_sdk_gui_composer_timeline.py",
+      "bytes": 23667,
+      "sha256": "90070f0f2ea6aeaf53ab87f941e920f345ff589637f6d0958c67fcbc3758cd98",
+      "source_mtime": "2026-09-22T14:37:08.560955+09:00"
+    },
+    "gui/test_sdk_gui_precision.py": {
+      "source_path": "/home/rnd_3/final step/test_sdk_gui_precision.py",
+      "bytes": 13970,
+      "sha256": "8cd7a34991dfb6691df5a622e092c6a98d131bdafb1b91a2a81f7e5bb8f4e459",
+      "source_mtime": "2026-09-22T14:20:08.564005+09:00"
+    },
+    "gui/diagnose_mx_bus.py": {
+      "source_path": "/home/rnd_3/final step/diagnose_mx_bus.py",
+      "bytes": 11225,
+      "sha256": "e85733700f660dcf834594f2a9db356023cc714a02c33060ac137522d2fd68f9",
+      "source_mtime": "2026-09-22T20:17:52.968967+09:00"
+    },
+    "gui/test_diagnose_mx_bus.py": {
+      "source_path": "/home/rnd_3/final step/test_diagnose_mx_bus.py",
+      "bytes": 2175,
+      "sha256": "4cc5514e10533f443d119d46f2eee84e99716a142ad96c5fac3c0fe49a9fb8e0",
+      "source_mtime": "2026-09-22T20:18:26.832966+09:00"
+    },
+    "cpp_sdk/dynamixel_controller.cpp": {
+      "source_path": "/home/rnd_3/final step/dynamixel_controller.cpp",
+      "bytes": 2609,
+      "sha256": "df2c48dbff7800deeaec7ad1e907c98b0e3c47262dd3c3d96f99088f8175e04a",
+      "source_mtime": "2026-07-22T16:14:49.825710+09:00"
+    },
+    "cpp_sdk/dynamixel_controller.hpp": {
+      "source_path": "/home/rnd_3/final step/dynamixel_controller.hpp",
+      "bytes": 1543,
+      "sha256": "d7d18d0448eaeac7e45b112143778fb9458c45ed1454c044abae54c1cffac2dc",
+      "source_mtime": "2026-07-22T16:14:49.746710+09:00"
+    },
+    "cpp_sdk/dynamixel_motion_hardware.cpp": {
+      "source_path": "/home/rnd_3/final step/dynamixel_motion_hardware.cpp",
+      "bytes": 4129,
+      "sha256": "cc0c4e86cc0a89520180a6fe84da76466dc8846cc8f8e3cc0746d9cb71f817bf",
+      "source_mtime": "2026-07-26T21:52:02.745782+09:00"
+    },
+    "cpp_sdk/dynamixel_motion_hardware.hpp": {
+      "source_path": "/home/rnd_3/final step/dynamixel_motion_hardware.hpp",
+      "bytes": 1047,
+      "sha256": "5e1a48ced4eb8909fb1a58fd3d5e542f7c02c074a1987b551e53b3e05271eae3",
+      "source_mtime": "2026-07-26T21:52:02.679782+09:00"
+    },
+    "cpp_sdk/main.cpp": {
+      "source_path": "/home/rnd_3/final step/main.cpp",
+      "bytes": 3028,
+      "sha256": "c0956f17ce5f92594c24eea10eb3660ef81b22fdad918cc76c6d245d93d38f63",
+      "source_mtime": "2026-07-26T21:58:38.610760+09:00"
+    },
+    "cpp_sdk/mock_motion_hardware.hpp": {
+      "source_path": "/home/rnd_3/final step/mock_motion_hardware.hpp",
+      "bytes": 4131,
+      "sha256": "cbfa80329c460dbc910291a9c3f08321cb139d176ee64f6ca3d52f2dd1d8881f",
+      "source_mtime": "2026-07-26T21:56:37.902767+09:00"
+    },
+    "cpp_sdk/motion_callback.cpp": {
+      "source_path": "/home/rnd_3/final step/motion_callback.cpp",
+      "bytes": 1761,
+      "sha256": "b119141329f711e08470877824c0dcc42ef7af8c8792bf8644a24559cbfc232a",
+      "source_mtime": "2026-07-13T17:13:23+09:00"
+    },
+    "cpp_sdk/motion_callback.hpp": {
+      "source_path": "/home/rnd_3/final step/motion_callback.hpp",
+      "bytes": 1006,
+      "sha256": "3aa39a6c47bbd395f446db6f652bec9aeb4f2f86e0f859ffba67841b85bc471e",
+      "source_mtime": "2026-07-13T17:13:22+09:00"
+    },
+    "cpp_sdk/motion_hardware.hpp": {
+      "source_path": "/home/rnd_3/final step/motion_hardware.hpp",
+      "bytes": 1149,
+      "sha256": "97911c8d0b13ed5d9df2de67b1073f8cfd3a268f6c33d48bed47dc4ddc09e896",
+      "source_mtime": "2026-07-26T21:55:52.062770+09:00"
+    },
+    "cpp_sdk/motion_pattern.cpp": {
+      "source_path": "/home/rnd_3/final step/motion_pattern.cpp",
+      "bytes": 17858,
+      "sha256": "de34f984016547cb1b171270b0feb5cad77a6fd2804dd74d1466ba844cc93fbe",
+      "source_mtime": "2026-07-26T21:52:32.127781+09:00"
+    },
+    "cpp_sdk/motion_pattern.hpp": {
+      "source_path": "/home/rnd_3/final step/motion_pattern.hpp",
+      "bytes": 4073,
+      "sha256": "09aa7d3d1528c9a0b25de2a630723b99bf6995c786eb62c4a06abfd8f4c138c5",
+      "source_mtime": "2026-07-28T20:29:49.973731+09:00"
+    },
+    "cpp_sdk/robot_motion_player.cpp": {
+      "source_path": "/home/rnd_3/final step/robot_motion_player.cpp",
+      "bytes": 21407,
+      "sha256": "ad1528b0d06bdfe61929c993c79534223ca598a596096e51ddbb5f92ac116e9c",
+      "source_mtime": "2026-09-02T19:52:55.165449+09:00"
+    },
+    "cpp_sdk/robot_motion_player.hpp": {
+      "source_path": "/home/rnd_3/final step/robot_motion_player.hpp",
+      "bytes": 6544,
+      "sha256": "5e33f97d7a6b31395ad5abacfc0e9e29ee06ed4b9afc2c33fd39ef7393c11a36",
+      "source_mtime": "2026-09-02T19:51:37.738747+09:00"
+    },
+    "cpp_sdk/robot_motion_player_dynamixel.cpp": {
+      "source_path": "/home/rnd_3/final step/robot_motion_player_dynamixel.cpp",
+      "bytes": 377,
+      "sha256": "fce0f460db65a038d9abe7b6cf7a310fcd2acda9c22bc0f092dcf576d2f8e5b6",
+      "source_mtime": "2026-07-26T21:52:02.812782+09:00"
+    },
+    "cpp_sdk/step_dynamixel.cpp": {
+      "source_path": "/home/rnd_3/final step/step_dynamixel.cpp",
+      "bytes": 20884,
+      "sha256": "e8b45d65a2a3a77f0daadc63b85243a8ef604038cc7fc2eba4dc3757a1620771",
+      "source_mtime": "2026-07-22T16:14:49.662709+09:00"
+    },
+    "cpp_sdk/step_dynamixel.hpp": {
+      "source_path": "/home/rnd_3/final step/step_dynamixel.hpp",
+      "bytes": 10141,
+      "sha256": "9910f55a9a0df808fe8928fb9a21b7769407fadd89ea7d82170749b95826f20e",
+      "source_mtime": "2026-07-22T16:14:49.577709+09:00"
+    },
+    "cpp_sdk/test_motion_callback.cpp": {
+      "source_path": "/home/rnd_3/final step/test_motion_callback.cpp",
+      "bytes": 1675,
+      "sha256": "98c9ede0e14a74be0dc33649f1215f8036ece1621436bba102cb33803d046791",
+      "source_mtime": "2026-07-16T05:49:11.355742+09:00"
+    },
+    "cpp_sdk/test_motion_pattern.cpp": {
+      "source_path": "/home/rnd_3/final step/test_motion_pattern.cpp",
+      "bytes": 5193,
+      "sha256": "84835fce00e8123abeb5569a69f150c7d5184cc9afe5fd9f5e6c9f51217c327e",
+      "source_mtime": "2026-07-16T08:46:19.512938+09:00"
+    },
+    "cpp_sdk/test_robot_motion_player.cpp": {
+      "source_path": "/home/rnd_3/final step/test_robot_motion_player.cpp",
+      "bytes": 5720,
+      "sha256": "b469eb5c8a6ca01510365a6b7aca469fb63c7a26a2968339ee36fa6a7392686e",
+      "source_mtime": "2026-09-21T17:34:24.994772+09:00"
+    },
+    "cpp_sdk/CMakeLists.txt": {
+      "source_path": "/home/rnd_3/final step/CMakeLists.txt",
+      "bytes": 2613,
+      "sha256": "4ba778ca70878a5c10dddb506c203cde8cf30de078624b91d44d55ae39d4f25f",
+      "source_mtime": "2026-07-26T21:56:52.219766+09:00"
+    },
+    "cpp_sdk/README.md": {
+      "source_path": "/home/rnd_3/final step/README.md",
+      "bytes": 7374,
+      "sha256": "8cdf5b959312286f88d83028ced16911cc3672f8dbcab063708700bf3b4e641b",
+      "source_mtime": "2026-07-28T20:27:20.948726+09:00"
+    },
+    "cpp_sdk/SDK_HANDOFF.md": {
+      "source_path": "/home/rnd_3/final step/SDK_HANDOFF.md",
+      "bytes": 10698,
+      "sha256": "8f1b0a3e72bf71bd9b123c11673f3fa349fd0a3f6f5e7c54073bd6ee34ab4200",
+      "source_mtime": "2026-09-22T14:36:50.228956+09:00"
+    },
+    "cpp_sdk/robot_motions.json": {
+      "source_path": "/home/rnd_3/final step/robot_motions.json",
+      "bytes": 713888,
+      "sha256": "ba8ef86fec898c38e839cbe4d12bbff2947bd6a45fd9a2d034818f9f6ade7c4c",
+      "source_mtime": "2026-09-30T00:06:21.826797+09:00"
+    },
+    "cpp_sdk/robot_motions.example.json": {
+      "source_path": "/home/rnd_3/final step/robot_motions.example.json",
+      "bytes": 625,
+      "sha256": "93bee2135be94e70a54e2548e5ff575a643f281fa292f9b2cd1d57448ab7f08c",
+      "source_mtime": "2026-07-13T17:13:23+09:00"
+    }
+  },
+  "generated_files": [
+    "ENVIRONMENT.json",
+    "README.md",
+    "REPLY_TO_IRC_VISION.md",
+    "data/export_comparison.json",
+    "data/robot_motions_from_gui_checked.json",
+    "gui/requirements-observed.txt",
+    "verification/api_probe.cpp",
+    "verification/api_probe.log",
+    "verification/catalog_fresh.log",
+    "verification/catalog_original.log",
+    "verification/catalog_probe.cpp",
+    "verification/cmake_build.log",
+    "verification/cmake_configure.log",
+    "verification/cpp_tests.log",
+    "verification/python_tests.log"
+  ],
+  "gui_frame_count": 691,
+  "gui_sequence_count": 405,
+  "checked_sequence_count": 85,
+  "hardware_access_performed": false,
+  "missing_assets": [
+    "gui/step.urdf (FK model unavailable; 3D viewer inactive)"
+  ],
+  "verification": {
+    "python_unittests": {
+      "passed": 43,
+      "failed": 0
+    },
+    "cpp_debug_build": "passed, including robot_control and irc_robot",
+    "ctest": {
+      "passed": 3,
+      "failed": 0
+    },
+    "catalog_loads": {
+      "original": 85,
+      "from_gui_snapshot": 85
+    },
+    "api_probe": "completed; results in verification/api_probe.log",
+    "hardware_commands_sent": false,
+    "ros2_full_integration_tested": false,
+    "gui_cpp_playback_parity": false
+  }
+}

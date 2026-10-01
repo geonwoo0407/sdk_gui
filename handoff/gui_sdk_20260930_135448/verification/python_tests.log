@@ -1,0 +1,54 @@
+Warning: Ignoring XDG_SESSION_TYPE=wayland on Gnome. Use QT_QPA_PLATFORM=wayland to run on Wayland anyway.
+This plugin does not support propagateSizeHints()
+----------------------------------------------------------------------
+Ran 43 tests in 0.662s
+
+OK
+[조합 시간 보정] 후진실전-2(3회): 원본 배속·반복 경계 복원
+[✅ 자동 로드] 프레임 0개, 시퀀스 1개를 복원했습니다.
+[조합 시간 보정] 후진실전-2(3회): 원본 배속·반복 경계 복원
+[✅ 자동 로드] 프레임 0개, 시퀀스 1개를 복원했습니다.
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 80ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] '[착지]' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] '오들' 100ms
+[GUI 코사인 프레임] '오들' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 5000ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[GUI 코사인 프레임] 'regular' 100ms
+[✅ 통신 성공] ID 17 -> -11.0도 명령 후 실기 Present Position 읽기
+[✅ 통신 성공] ID 17 -> -33.0도 명령 후 실기 Present Position 읽기
+[✅ 통신 성공] ID 17 -> -32.607421875도 명령 후 실기 Present Position 읽기
+[✅ 통신 성공] ID 17 -> -32.607421875도 명령 후 실기 Present Position 읽기
+[✅ 통신 성공] ID 17 -> -12.392578125도 명령 후 실기 Present Position 읽기
+[✅ 통신 성공] ID 17 -> -32.607421875도 명령 후 실기 Present Position 읽기
+[GUI 코사인 프레임] 'Frame 1' 500ms
+[✅ 통신 성공] ID 17 -> -4.74609375도 명령 후 실기 Present Position 읽기

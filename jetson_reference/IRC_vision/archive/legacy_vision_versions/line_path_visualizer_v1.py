@@ -1,0 +1,1219 @@
+#!/usr/bin/env python3
+"""
+ROS 2 debug visualizer for YOLO line-path analysis.
+
+Inputs
+------
+/camera/camera/color/image_raw
+    sensor_msgs/msg/Image
+
+/vision/line_info
+    std_msgs/msg/String
+    JSON output from yolo_line_analyzer
+
+Outputs
+-------
+Optional annotated image:
+    /vision/line_path/image
+
+Display
+-------
+OpenCV window showing:
+
+- Camera center line
+- YOLO line center points
+- Near-to-far point ordering
+- Connected path polyline
+- Immediate heading arrow
+- Lateral offset
+- Raw / filtered navigation values
+- Turn information
+- Quality information
+
+Important
+---------
+This node does NOT make navigation decisions.
+It is a development/debug visualization node only.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+from typing import Any
+
+import cv2
+import numpy as np
+import rclpy
+from cv_bridge import CvBridge
+from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
+from std_msgs.msg import String
+
+
+class LinePathVisualizer(Node):
+    """Visualize line geometry from /vision/line_info."""
+
+    def __init__(self) -> None:
+        super().__init__("line_path_visualizer")
+
+        # ====================================================
+        # ROS topics
+        # ====================================================
+
+        self.declare_parameter(
+            "image_topic",
+            "/camera/camera/color/image_raw",
+        )
+
+        self.declare_parameter(
+            "line_info_topic",
+            "/vision/line_info",
+        )
+
+        self.declare_parameter(
+            "annotated_image_topic",
+            "/vision/line_path/image",
+        )
+
+        # ====================================================
+        # Display / publishing
+        # ====================================================
+
+        self.declare_parameter(
+            "display",
+            True,
+        )
+
+        self.declare_parameter(
+            "publish_annotated_image",
+            False,
+        )
+
+        self.declare_parameter(
+            "window_name",
+            "LINE PATH DEBUG",
+        )
+
+        # ====================================================
+        # Data freshness
+        # ====================================================
+
+        # Ignore line_info older than this many seconds.
+        self.declare_parameter(
+            "max_line_info_age_sec",
+            0.5,
+        )
+
+        # ====================================================
+        # Drawing
+        # ====================================================
+
+        self.declare_parameter(
+            "point_radius",
+            7,
+        )
+
+        self.declare_parameter(
+            "line_thickness",
+            4,
+        )
+
+        self.declare_parameter(
+            "heading_arrow_length_px",
+            180,
+        )
+
+        self.declare_parameter(
+            "show_point_numbers",
+            True,
+        )
+
+        self.declare_parameter(
+            "show_all_metrics",
+            True,
+        )
+
+        # ====================================================
+        # Read parameters
+        # ====================================================
+
+        self.display = bool(
+            self.get_parameter("display").value
+        )
+
+        self.publish_annotated_image = bool(
+            self.get_parameter(
+                "publish_annotated_image"
+            ).value
+        )
+
+        self.window_name = str(
+            self.get_parameter("window_name").value
+        )
+
+        self.max_line_info_age_sec = float(
+            self.get_parameter(
+                "max_line_info_age_sec"
+            ).value
+        )
+
+        self.point_radius = int(
+            self.get_parameter("point_radius").value
+        )
+
+        self.line_thickness = int(
+            self.get_parameter("line_thickness").value
+        )
+
+        self.heading_arrow_length_px = int(
+            self.get_parameter(
+                "heading_arrow_length_px"
+            ).value
+        )
+
+        self.show_point_numbers = bool(
+            self.get_parameter(
+                "show_point_numbers"
+            ).value
+        )
+
+        self.show_all_metrics = bool(
+            self.get_parameter(
+                "show_all_metrics"
+            ).value
+        )
+
+        image_topic = str(
+            self.get_parameter("image_topic").value
+        )
+
+        line_info_topic = str(
+            self.get_parameter("line_info_topic").value
+        )
+
+        annotated_image_topic = str(
+            self.get_parameter(
+                "annotated_image_topic"
+            ).value
+        )
+
+        # ====================================================
+        # State
+        # ====================================================
+
+        self.bridge = CvBridge()
+
+        self.latest_line_info: dict[str, Any] | None = None
+
+        self.latest_line_info_time: float | None = None
+
+        # ====================================================
+        # ROS publisher / subscribers
+        # ====================================================
+
+        self.line_info_subscription = self.create_subscription(
+            String,
+            line_info_topic,
+            self._line_info_callback,
+            10,
+        )
+
+        self.image_subscription = self.create_subscription(
+            Image,
+            image_topic,
+            self._image_callback,
+            qos_profile_sensor_data,
+        )
+
+        self.annotated_image_publisher = None
+
+        if self.publish_annotated_image:
+            self.annotated_image_publisher = self.create_publisher(
+                Image,
+                annotated_image_topic,
+                10,
+            )
+
+        # ====================================================
+        # Startup log
+        # ====================================================
+
+        self.get_logger().info(
+            f"Image topic: {image_topic}"
+        )
+
+        self.get_logger().info(
+            f"Line info topic: {line_info_topic}"
+        )
+
+        self.get_logger().info(
+            f"Display: {self.display}"
+        )
+
+        self.get_logger().info(
+            "Publish annotated image: "
+            f"{self.publish_annotated_image}"
+        )
+
+    # ========================================================
+    # ROS callbacks
+    # ========================================================
+
+    def _line_info_callback(
+        self,
+        message: String,
+    ) -> None:
+        """Store latest line-analysis JSON."""
+
+        try:
+            payload = json.loads(message.data)
+
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    "line_info JSON must be an object"
+                )
+
+            self.latest_line_info = payload
+            self.latest_line_info_time = time.monotonic()
+
+        except (
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            self.get_logger().warning(
+                "Invalid line-info message: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+    def _image_callback(
+        self,
+        message: Image,
+    ) -> None:
+        """Draw latest line data over current camera image."""
+
+        try:
+            frame = self.bridge.imgmsg_to_cv2(
+                message,
+                desired_encoding="bgr8",
+            )
+
+        except Exception as exc:
+            self.get_logger().error(
+                "cv_bridge conversion failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return
+
+        annotated = frame.copy()
+
+        self._draw_camera_center(
+            annotated
+        )
+
+        line_info = self._get_fresh_line_info()
+
+        if line_info is None:
+            self._draw_no_data_message(
+                annotated,
+                "WAITING FOR LINE INFO",
+            )
+
+        elif not bool(
+            line_info.get(
+                "detected",
+                False,
+            )
+        ):
+            self._draw_no_data_message(
+                annotated,
+                "LINE NOT DETECTED",
+            )
+
+            self._draw_filtered_history(
+                annotated,
+                line_info,
+            )
+
+        else:
+            self._draw_detected_line(
+                annotated,
+                line_info,
+            )
+
+        if (
+            self.publish_annotated_image
+            and self.annotated_image_publisher is not None
+        ):
+            try:
+                output_message = (
+                    self.bridge.cv2_to_imgmsg(
+                        annotated,
+                        encoding="bgr8",
+                    )
+                )
+
+                output_message.header = message.header
+
+                self.annotated_image_publisher.publish(
+                    output_message
+                )
+
+            except Exception as exc:
+                self.get_logger().warning(
+                    "Annotated image publish failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        if self.display:
+            try:
+                cv2.imshow(
+                    self.window_name,
+                    annotated,
+                )
+
+                cv2.waitKey(1)
+
+            except cv2.error as exc:
+                self.get_logger().error(
+                    f"OpenCV display failed: {exc}"
+                )
+
+    # ========================================================
+    # Freshness
+    # ========================================================
+
+    def _get_fresh_line_info(
+        self,
+    ) -> dict[str, Any] | None:
+        """Return latest line info only when sufficiently fresh."""
+
+        if (
+            self.latest_line_info is None
+            or self.latest_line_info_time is None
+        ):
+            return None
+
+        age = (
+            time.monotonic()
+            - self.latest_line_info_time
+        )
+
+        if age > self.max_line_info_age_sec:
+            return None
+
+        return self.latest_line_info
+
+    # ========================================================
+    # Main drawing
+    # ========================================================
+
+    def _draw_detected_line(
+        self,
+        frame: np.ndarray,
+        data: dict[str, Any],
+    ) -> None:
+        """Draw all valid detected-line information."""
+
+        height, width = frame.shape[:2]
+
+        points = self._parse_center_points(
+            data.get(
+                "center_points_px",
+                [],
+            )
+        )
+
+        if points:
+            self._draw_path_polyline(
+                frame,
+                points,
+            )
+
+            self._draw_center_points(
+                frame,
+                points,
+            )
+
+        self._draw_lateral_offset(
+            frame,
+            data,
+        )
+
+        self._draw_heading_arrow(
+            frame,
+            data,
+            points,
+        )
+
+        self._draw_status_panel(
+            frame,
+            data,
+        )
+
+        # Small image dimensions reference.
+        cv2.putText(
+            frame,
+            f"{width}x{height}",
+            (
+                width - 130,
+                height - 15,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (200, 200, 200),
+            1,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Camera center
+    # ========================================================
+
+    @staticmethod
+    def _draw_camera_center(
+        frame: np.ndarray,
+    ) -> None:
+        """Draw camera/image center reference."""
+
+        height, width = frame.shape[:2]
+
+        center_x = width // 2
+
+        cv2.line(
+            frame,
+            (center_x, 0),
+            (center_x, height),
+            (255, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            frame,
+            "CAMERA CENTER",
+            (
+                center_x + 10,
+                25,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Point parsing
+    # ========================================================
+
+    @staticmethod
+    def _parse_center_points(
+        raw_points: Any,
+    ) -> list[tuple[int, int]]:
+        """Safely parse JSON center-point list."""
+
+        if not isinstance(
+            raw_points,
+            list,
+        ):
+            return []
+
+        points: list[tuple[int, int]] = []
+
+        for raw_point in raw_points:
+            if (
+                not isinstance(raw_point, list)
+                or len(raw_point) != 2
+            ):
+                continue
+
+            try:
+                x = int(
+                    round(
+                        float(raw_point[0])
+                    )
+                )
+
+                y = int(
+                    round(
+                        float(raw_point[1])
+                    )
+                )
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+            points.append(
+                (x, y)
+            )
+
+        return points
+
+    # ========================================================
+    # Polyline
+    # ========================================================
+
+    def _draw_path_polyline(
+        self,
+        frame: np.ndarray,
+        points: list[tuple[int, int]],
+    ) -> None:
+        """
+        Connect center points from near to far.
+
+        center_points_px from yolo_line_analyzer are already
+        sorted:
+
+            nearest -> farthest
+        """
+
+        if len(points) < 2:
+            return
+
+        polyline = np.asarray(
+            points,
+            dtype=np.int32,
+        ).reshape(
+            (-1, 1, 2)
+        )
+
+        # Thick dark outline first.
+        cv2.polylines(
+            frame,
+            [polyline],
+            False,
+            (0, 0, 0),
+            self.line_thickness + 4,
+            cv2.LINE_AA,
+        )
+
+        # Main path line.
+        cv2.polylines(
+            frame,
+            [polyline],
+            False,
+            (0, 255, 0),
+            self.line_thickness,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Points
+    # ========================================================
+
+    def _draw_center_points(
+        self,
+        frame: np.ndarray,
+        points: list[tuple[int, int]],
+    ) -> None:
+        """Draw each path point and its near-to-far index."""
+
+        for index, point in enumerate(points):
+            x, y = point
+
+            # Near point gets a different marker.
+            if index == 0:
+                point_color = (0, 0, 255)
+                radius = self.point_radius + 3
+
+            else:
+                point_color = (0, 255, 255)
+                radius = self.point_radius
+
+            cv2.circle(
+                frame,
+                (x, y),
+                radius + 2,
+                (0, 0, 0),
+                -1,
+                cv2.LINE_AA,
+            )
+
+            cv2.circle(
+                frame,
+                (x, y),
+                radius,
+                point_color,
+                -1,
+                cv2.LINE_AA,
+            )
+
+            if self.show_point_numbers:
+                cv2.putText(
+                    frame,
+                    str(index),
+                    (
+                        x + 12,
+                        y - 8,
+                    ),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+        # Label first point explicitly.
+        near_x, near_y = points[0]
+
+        cv2.putText(
+            frame,
+            "NEAR",
+            (
+                near_x + 15,
+                near_y + 25,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        far_x, far_y = points[-1]
+
+        cv2.putText(
+            frame,
+            "FAR",
+            (
+                far_x + 15,
+                far_y - 15,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Heading arrow
+    # ========================================================
+
+    def _draw_heading_arrow(
+        self,
+        frame: np.ndarray,
+        data: dict[str, Any],
+        points: list[tuple[int, int]],
+    ) -> None:
+        """Draw filtered/current heading from nearest line point."""
+
+        heading = data.get(
+            "filtered_heading_error_deg"
+        )
+
+        if heading is None:
+            heading = data.get(
+                "heading_error_deg"
+            )
+
+        if heading is None:
+            return
+
+        try:
+            heading_deg = float(
+                heading
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return
+
+        height, width = frame.shape[:2]
+
+        if points:
+            start_x, start_y = points[0]
+
+        else:
+            start_x = width // 2
+            start_y = int(
+                height * 0.82
+            )
+
+        angle_rad = math.radians(
+            heading_deg
+        )
+
+        # Image coordinate convention:
+        #
+        # heading 0:
+        #   arrow goes upward.
+        #
+        # positive:
+        #   arrow turns toward image right.
+        end_x = int(
+            round(
+                start_x
+                + self.heading_arrow_length_px
+                * math.sin(angle_rad)
+            )
+        )
+
+        end_y = int(
+            round(
+                start_y
+                - self.heading_arrow_length_px
+                * math.cos(angle_rad)
+            )
+        )
+
+        cv2.arrowedLine(
+            frame,
+            (start_x, start_y),
+            (end_x, end_y),
+            (255, 0, 255),
+            5,
+            cv2.LINE_AA,
+            tipLength=0.15,
+        )
+
+        cv2.putText(
+            frame,
+            f"HEADING {heading_deg:+.1f} deg",
+            (
+                end_x + 10,
+                end_y,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Lateral offset
+    # ========================================================
+
+    @staticmethod
+    def _draw_lateral_offset(
+        frame: np.ndarray,
+        data: dict[str, Any],
+    ) -> None:
+        """Draw camera center to predicted line offset."""
+
+        offset_px = data.get(
+            "lateral_offset_px"
+        )
+
+        if offset_px is None:
+            return
+
+        try:
+            offset_value = float(
+                offset_px
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return
+
+        height, width = frame.shape[:2]
+
+        center_x = width // 2
+
+        eval_y = int(
+            height * 0.82
+        )
+
+        line_x = int(
+            round(
+                center_x
+                + offset_value
+            )
+        )
+
+        line_x = max(
+            0,
+            min(
+                width - 1,
+                line_x,
+            ),
+        )
+
+        cv2.line(
+            frame,
+            (center_x, eval_y),
+            (line_x, eval_y),
+            (0, 165, 255),
+            5,
+            cv2.LINE_AA,
+        )
+
+        cv2.circle(
+            frame,
+            (line_x, eval_y),
+            9,
+            (0, 165, 255),
+            -1,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            frame,
+            f"OFFSET {offset_value:+.1f}px",
+            (
+                min(
+                    center_x,
+                    line_x,
+                ),
+                eval_y - 15,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 165, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+    # ========================================================
+    # Status panel
+    # ========================================================
+
+    def _draw_status_panel(
+        self,
+        frame: np.ndarray,
+        data: dict[str, Any],
+    ) -> None:
+        """Draw compact navigation values."""
+
+        raw_heading = self._format_number(
+            data.get(
+                "heading_error_deg"
+            ),
+            2,
+        )
+
+        filtered_heading = self._format_number(
+            data.get(
+                "filtered_heading_error_deg"
+            ),
+            2,
+        )
+
+        raw_offset = self._format_number(
+            data.get(
+                "lateral_offset_norm"
+            ),
+            3,
+        )
+
+        filtered_offset = self._format_number(
+            data.get(
+                "filtered_lateral_offset_norm"
+            ),
+            3,
+        )
+
+        consistency = self._format_number(
+            data.get(
+                "turn_consistency"
+            ),
+            3,
+        )
+
+        angle_change = self._format_number(
+            data.get(
+                "angle_change_mean_deg"
+            ),
+            2,
+        )
+
+        heading_quality = self._format_number(
+            data.get(
+                "heading_quality"
+            ),
+            3,
+        )
+
+        geometry_quality = self._format_number(
+            data.get(
+                "geometry_quality"
+            ),
+            3,
+        )
+
+        lines = [
+            (
+                "LINE "
+                f"{data.get('line_count', 0)}"
+                " | "
+                f"FILTER "
+                f"{'READY' if data.get('filter_ready') else 'WAIT'}"
+            ),
+            (
+                f"RAW H       : {raw_heading} deg"
+            ),
+            (
+                f"FILTER H    : {filtered_heading} deg"
+            ),
+            (
+                f"RAW OFFSET  : {raw_offset}"
+            ),
+            (
+                f"FILTER OFF  : {filtered_offset}"
+            ),
+            (
+                f"TURN CONS   : {consistency}"
+            ),
+            (
+                f"ANGLE CHANGE: {angle_change} deg"
+            ),
+            (
+                f"HEADING Q   : {heading_quality}"
+            ),
+            (
+                f"GEOMETRY Q  : {geometry_quality}"
+            ),
+        ]
+
+        if self.show_all_metrics:
+            lines.extend(
+                [
+                    (
+                        "FAR H       : "
+                        + self._format_number(
+                            data.get(
+                                "far_heading_deg"
+                            ),
+                            2,
+                        )
+                        + " deg"
+                    ),
+                    (
+                        "TURN ANGLE  : "
+                        + self._format_number(
+                            data.get(
+                                "turn_angle_deg"
+                            ),
+                            2,
+                        )
+                        + " deg"
+                    ),
+                    (
+                        "PROCESS     : "
+                        + self._format_number(
+                            data.get(
+                                "processing_ms"
+                            ),
+                            3,
+                        )
+                        + " ms"
+                    ),
+                ]
+            )
+
+        self._draw_text_panel(
+            frame,
+            lines,
+        )
+
+    # ========================================================
+    # Previous filtered history when no line is detected
+    # ========================================================
+
+    def _draw_filtered_history(
+        self,
+        frame: np.ndarray,
+        data: dict[str, Any],
+    ) -> None:
+        """Show retained filter state during temporary line loss."""
+
+        lines = [
+            "LINE NOT DETECTED",
+            (
+                "FILTER H : "
+                + self._format_number(
+                    data.get(
+                        "filtered_heading_error_deg"
+                    ),
+                    2,
+                )
+                + " deg"
+            ),
+            (
+                "FILTER O : "
+                + self._format_number(
+                    data.get(
+                        "filtered_lateral_offset_norm"
+                    ),
+                    3,
+                )
+            ),
+            (
+                "MISSED   : "
+                f"{data.get('missed_line_frames', 0)}"
+            ),
+        ]
+
+        self._draw_text_panel(
+            frame,
+            lines,
+        )
+
+    # ========================================================
+    # Generic text helpers
+    # ========================================================
+
+    @staticmethod
+    def _draw_text_panel(
+        frame: np.ndarray,
+        lines: list[str],
+    ) -> None:
+        """Draw readable semi-transparent status panel."""
+
+        if not lines:
+            return
+
+        x = 20
+        y = 40
+
+        line_height = 29
+
+        panel_width = 360
+
+        panel_height = (
+            len(lines) * line_height
+            + 25
+        )
+
+        overlay = frame.copy()
+
+        cv2.rectangle(
+            overlay,
+            (10, 10),
+            (
+                10 + panel_width,
+                10 + panel_height,
+            ),
+            (0, 0, 0),
+            -1,
+        )
+
+        cv2.addWeighted(
+            overlay,
+            0.65,
+            frame,
+            0.35,
+            0,
+            frame,
+        )
+
+        for index, text in enumerate(lines):
+            text_y = (
+                y
+                + index * line_height
+            )
+
+            cv2.putText(
+                frame,
+                text,
+                (x, text_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.62,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+
+    @staticmethod
+    def _draw_no_data_message(
+        frame: np.ndarray,
+        message: str,
+    ) -> None:
+        """Draw centered warning message."""
+
+        height, width = frame.shape[:2]
+
+        cv2.putText(
+            frame,
+            message,
+            (
+                max(
+                    20,
+                    width // 2 - 180,
+                ),
+                height // 2,
+            ),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.0,
+            (0, 0, 255),
+            3,
+            cv2.LINE_AA,
+        )
+
+    @staticmethod
+    def _format_number(
+        value: Any,
+        decimals: int,
+    ) -> str:
+        """Safely format optional numeric value."""
+
+        if value is None:
+            return "null"
+
+        try:
+            return (
+                f"{float(value):.{decimals}f}"
+            )
+
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return str(value)
+
+    # ========================================================
+    # Shutdown
+    # ========================================================
+
+    def destroy_node(self) -> bool:
+        """Close OpenCV windows before node shutdown."""
+
+        if self.display:
+            try:
+                cv2.destroyAllWindows()
+
+            except cv2.error:
+                pass
+
+        return super().destroy_node()
+
+
+def main(
+    args: list[str] | None = None,
+) -> None:
+    rclpy.init(
+        args=args
+    )
+
+    node = LinePathVisualizer()
+
+    try:
+        rclpy.spin(
+            node
+        )
+
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        node.destroy_node()
+
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

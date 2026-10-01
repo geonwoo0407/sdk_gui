@@ -1,0 +1,7 @@
+startPoseTransition: false
+updateStartupPose: false
+queueNext: true
+completionSequence: true
+setPositionToleranceEnabled: false
+setJointOverride: false
+clearJointOverride: false

@@ -1,0 +1,29 @@
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: new high-speed USB device number 5 using xhci_hcd
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: New USB device found, idVendor=0403, idProduct=6014, bcdDevice= 9.00
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: Product: USB <-> Serial Converter
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: Manufacturer: FTDI
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: SerialNumber: FTAKRKTW
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: Detected FT232H
+2026-09-17T00:28:40+0900 rnd kernel: usb 1-9: FTDI USB Serial Device converter now attached to ttyUSB0
+2026-09-17T00:34:14+0900 rnd kernel: usb 1-9: USB disconnect, device number 5
+2026-09-17T00:34:14+0900 rnd kernel: ftdi_sio ttyUSB0: FTDI USB Serial Device converter now disconnected from ttyUSB0
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: new high-speed USB device number 6 using xhci_hcd
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: New USB device found, idVendor=0403, idProduct=6014, bcdDevice= 9.00
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: Product: USB <-> Serial Converter
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: Manufacturer: FTDI
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: SerialNumber: FTAKRKTW
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: Detected FT232H
+2026-09-17T00:34:15+0900 rnd kernel: usb 1-9: FTDI USB Serial Device converter now attached to ttyUSB0
+2026-09-17T00:34:16+0900 rnd kernel: usb 1-9: USB disconnect, device number 6
+2026-09-17T00:34:16+0900 rnd kernel: ftdi_sio ttyUSB0: FTDI USB Serial Device converter now disconnected from ttyUSB0
+2026-09-17T00:34:17+0900 rnd kernel: usb 1-9: new high-speed USB device number 8 using xhci_hcd
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: device descriptor read/64, error -71
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: New USB device found, idVendor=0403, idProduct=6014, bcdDevice= 9.00
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: New USB device strings: Mfr=1, Product=2, SerialNumber=3
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: Product: USB <-> Serial Converter
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: Manufacturer: FTDI
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: SerialNumber: FTAKRKTW
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: Detected FT232H
+2026-09-17T00:34:18+0900 rnd kernel: usb 1-9: FTDI USB Serial Device converter now attached to ttyUSB0

@@ -1,0 +1,52 @@
+{
+  "python": "3.10.12 (main, Aug 31 2026, 10:18:17) [GCC 11.4.0]",
+  "python_executable": "/usr/bin/python3",
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "packages": {
+    "PyQt5": "5.15.6",
+    "dynamixel-sdk": "4.0.5",
+    "pyserial": "3.5",
+    "numpy": "1.21.5"
+  },
+  "cmake": {
+    "command": [
+      "cmake",
+      "--version"
+    ],
+    "returncode": 0,
+    "stdout": "cmake version 3.22.1\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+    "stderr": ""
+  },
+  "compiler": {
+    "command": [
+      "c++",
+      "--version"
+    ],
+    "returncode": 0,
+    "stdout": "c++ (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0\nCopyright (C) 2021 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "stderr": ""
+  },
+  "debian_packages": {
+    "command": [
+      "dpkg-query",
+      "-W",
+      "-f=${Package} ${Version}\n",
+      "libeigen3-dev",
+      "libqt5core5a",
+      "python3-pyqt5"
+    ],
+    "returncode": 0,
+    "stdout": "libeigen3-dev 3.4.0-2ubuntu2\nlibqt5core5a 5.15.3+dfsg-2ubuntu0.2\npython3-pyqt5 5.15.6+dfsg-1ubuntu3\n",
+    "stderr": ""
+  },
+  "external_dynamixel_cpp_sdk_version": null,
+  "external_dynamixel_cpp_sdk_version_note": "No version identifier verified; Python package version does not establish C++ library version.",
+  "hardware_access_performed": false,
+  "external_dynamixel_cpp_library": {
+    "path": "/usr/local/lib/libdxl_x64_cpp.so",
+    "sha256": "1c3a4c6b7295a830c65b92df812b239efa2ba091c3f9939e25a75cd2363eb26f"
+  },
+  "usb_latency_ms": {
+    "ttyUSB1": "16"
+  }
+}
