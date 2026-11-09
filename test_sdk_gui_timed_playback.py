@@ -4,11 +4,12 @@ import math
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from continuous_trajectory import ContinuousTrajectory
 
 source = ast.parse(Path(__file__).with_name('sdk_gui.py').read_text())
 method_names = {
     'normalize_angles', 'shortest_angle_delta',
-    'anim_step', 'scrub_timeline', 'frame_motion_progress',
+    'anim_step', 'scrub_timeline', 'frame_motion_progress', 'timeline_frame_angles',
     'interpolate_angle_shortest', 'gate_timeline_on_frame_arrival',
     'fail_timed_playback',
     'map_timeline_time', 'playback_time_ms',
@@ -20,6 +21,7 @@ methods = [node for cls in source.body if isinstance(cls, ast.ClassDef)
 constants = [node for node in source.body if isinstance(node, ast.Assign)
              and all(isinstance(t, ast.Name) and t.id.isupper() for t in node.targets)]
 namespace = {
+    'ContinuousTrajectory': ContinuousTrajectory,
     'math': math, 'time': SimpleNamespace(perf_counter=lambda: 0.0),
     'TimelineBlockWidget': object,
 }

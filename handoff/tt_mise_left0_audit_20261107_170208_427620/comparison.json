@@ -1,0 +1,166 @@
+{
+  "state_sha256": "8dc20828350eb5f68c45ed4b30d08e0e03d2abdb311894bd0599e9116c80042e",
+  "sequence_name": "tt미세왼옆0도",
+  "sequence_id": "c39fea737e0a450da961e84dc652def9",
+  "repeat_count": 1,
+  "playback_speed": 0.95,
+  "max_seq_ms": 7045,
+  "active_frames_equal_saved": true,
+  "comparisons": [
+    {
+      "sequence_frame_name": "r미세왼옆1",
+      "library_row_1based": 984,
+      "library_frame_name": "r미세왼옆1",
+      "frame_id": "3c65732adc7c443ba427644e7394d6a2",
+      "angles_identical": true,
+      "angle_count": 23,
+      "torques_identical": true,
+      "sequence_start_ms": 80,
+      "sequence_duration_ms": 60,
+      "sequence_end_ms": 140,
+      "library_duration_ms": 1000,
+      "other_differences": {}
+    },
+    {
+      "sequence_frame_name": "r미세왼옆2",
+      "library_row_1based": 985,
+      "library_frame_name": "r미세왼옆2",
+      "frame_id": "27f8560fcec74b228931bd1238115242",
+      "angles_identical": true,
+      "angle_count": 23,
+      "torques_identical": true,
+      "sequence_start_ms": 140,
+      "sequence_duration_ms": 120,
+      "sequence_end_ms": 260,
+      "library_duration_ms": 1000,
+      "other_differences": {}
+    },
+    {
+      "sequence_frame_name": "r미세왼옆3",
+      "library_row_1based": 986,
+      "library_frame_name": "r미세왼옆3",
+      "frame_id": "ae757e2756514bb49a534cae7e357df9",
+      "angles_identical": true,
+      "angle_count": 23,
+      "torques_identical": true,
+      "sequence_start_ms": 320,
+      "sequence_duration_ms": 100,
+      "sequence_end_ms": 420,
+      "library_duration_ms": 1000,
+      "other_differences": {}
+    },
+    {
+      "sequence_frame_name": "미세오옆꽃게90-5",
+      "library_row_1based": 1069,
+      "library_frame_name": "미세오옆꽃게90-5",
+      "frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+      "angles_identical": true,
+      "angle_count": 23,
+      "torques_identical": true,
+      "sequence_start_ms": 420,
+      "sequence_duration_ms": 120,
+      "sequence_end_ms": 540,
+      "library_duration_ms": 1000,
+      "other_differences": {}
+    }
+  ],
+  "fourth_frame_vs_r_mise_left4": {
+    "angles_identical": false,
+    "differences": {
+      "0": {
+        "saved_fourth": 1.0,
+        "r_mise_left4": -64.0
+      },
+      "1": {
+        "saved_fourth": 0.263671875,
+        "r_mise_left4": -0.703125
+      },
+      "2": {
+        "saved_fourth": -10.107421875,
+        "r_mise_left4": -9.404296875
+      },
+      "3": {
+        "saved_fourth": 9.052734375,
+        "r_mise_left4": 8.525390625
+      },
+      "4": {
+        "saved_fourth": 19.86328125,
+        "r_mise_left4": 22.0
+      },
+      "5": {
+        "saved_fourth": -17.314453125,
+        "r_mise_left4": -19.0
+      },
+      "6": {
+        "saved_fourth": 67.5,
+        "r_mise_left4": 69.169921875
+      },
+      "7": {
+        "saved_fourth": -68.90625,
+        "r_mise_left4": -70.48828125
+      },
+      "8": {
+        "saved_fourth": -11.42578125,
+        "r_mise_left4": -11.25
+      },
+      "9": {
+        "saved_fourth": 3.076171875,
+        "r_mise_left4": 2.724609375
+      },
+      "10": {
+        "saved_fourth": 0.52734375,
+        "r_mise_left4": -2.28515625
+      },
+      "11": {
+        "saved_fourth": -1.52734375,
+        "r_mise_left4": -0.17578125
+      },
+      "12": {
+        "saved_fourth": 2.98828125,
+        "r_mise_left4": 0.1640625
+      },
+      "13": {
+        "saved_fourth": -45.703125,
+        "r_mise_left4": -49.658203125
+      },
+      "14": {
+        "saved_fourth": 47.63671875,
+        "r_mise_left4": 46.0
+      },
+      "15": {
+        "saved_fourth": 3.603515625,
+        "r_mise_left4": 1.845703125
+      },
+      "16": {
+        "saved_fourth": -1.58203125,
+        "r_mise_left4": -3.0
+      },
+      "17": {
+        "saved_fourth": -30.322265625,
+        "r_mise_left4": -27.861328125
+      },
+      "18": {
+        "saved_fourth": 29.443359375,
+        "r_mise_left4": 23.90625
+      },
+      "19": {
+        "saved_fourth": 68.02734375,
+        "r_mise_left4": 63.45703125
+      },
+      "20": {
+        "saved_fourth": -68.291015625,
+        "r_mise_left4": -64.884765625
+      },
+      "21": {
+        "saved_fourth": 5.09765625,
+        "r_mise_left4": 2.373046875
+      },
+      "22": {
+        "saved_fourth": -5.9765625,
+        "r_mise_left4": -5.0
+      }
+    }
+  },
+  "export_frames_equal_saved": true,
+  "export_file": "/home/rnd_3/final step/handoff/tt_mise_left0_audit_20261107_170208_427620/tt미세왼옆0도.json"
+}

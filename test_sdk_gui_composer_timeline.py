@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 import uuid
+from continuous_trajectory import ContinuousTrajectory
 from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -24,6 +25,7 @@ import test_sdk_gui_timed_playback as playback
 # widgets, then build only the composer page with real Qt controls.
 source = ast.parse(Path(__file__).with_name('sdk_gui.py').read_text())
 namespace = {'copy': copy, 'json': json, 'math': math, 'hashlib': hashlib, 'os': os, 'uuid': uuid}
+namespace['ContinuousTrajectory'] = ContinuousTrajectory
 for module in (QtCore, QtGui, QtWidgets):
     namespace.update(vars(module))
 nodes = []

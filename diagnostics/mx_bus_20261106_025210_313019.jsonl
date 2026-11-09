@@ -1,0 +1,9 @@
+{"time": "2026-11-06T02:52:10.445477+09:00", "event": "session", "port": "/dev/ttyUSB0", "baud": 4000000, "ids": [5, 14], "usb_latency_ms": "16", "read_only": true, "samples_requested": 10}
+{"time": "2026-11-06T02:52:10.479662+09:00", "event": "ping", "id": 5, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 1}
+{"time": "2026-11-06T02:52:10.513827+09:00", "event": "ping", "id": 5, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 2}
+{"time": "2026-11-06T02:52:10.548047+09:00", "event": "ping", "id": 5, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 3}
+{"time": "2026-11-06T02:52:10.582231+09:00", "event": "ping", "id": 14, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 1}
+{"time": "2026-11-06T02:52:10.616429+09:00", "event": "ping", "id": 14, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 2}
+{"time": "2026-11-06T02:52:10.650603+09:00", "event": "ping", "id": 14, "model": 0, "comm": -3002, "packet_error": 0, "attempt": 3}
+{"time": "2026-11-06T02:52:12.452772+09:00", "event": "summary", "id": 5}
+{"time": "2026-11-06T02:52:12.452851+09:00", "event": "summary", "id": 14}

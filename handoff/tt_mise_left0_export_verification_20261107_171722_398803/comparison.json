@@ -1,0 +1,1040 @@
+{
+  "state_sha256": "ad6e86e350ab98991567908b88666f7661d3f05811b0fa8ba05b2cfef2d530b0",
+  "export_sha256": "ba38be0bcbbfbee532aa6e2078be463ab06aa9ea4960dcfc3d66be5b83fd5283",
+  "export_path": "/home/rnd_3/final step/robot_motions.json",
+  "target_name": "tt미세왼옆0도",
+  "export_frames_exactly_equal_saved": true,
+  "current_timeline_frames_exactly_equal_saved": false,
+  "current_timeline_vs_saved": [
+    {
+      "number": 1,
+      "current_name": "ttt미세왼옆1",
+      "saved_name": "r미세왼옆1",
+      "differing_angle_count": 22,
+      "angle_differences": {
+        "0": {
+          "current_timeline": 0.791015625,
+          "saved_sequence": 1.0
+        },
+        "1": {
+          "current_timeline": -0.87890625,
+          "saved_sequence": -0.791015625
+        },
+        "2": {
+          "current_timeline": -9.84375,
+          "saved_sequence": -9.66796875
+        },
+        "3": {
+          "current_timeline": 9.052734375,
+          "saved_sequence": 8.7890625
+        },
+        "4": {
+          "current_timeline": 20.478515625,
+          "saved_sequence": 20.7421875
+        },
+        "5": {
+          "current_timeline": -17.841796875,
+          "saved_sequence": -18.720703125
+        },
+        "6": {
+          "current_timeline": 68.466796875,
+          "saved_sequence": 68.73046875
+        },
+        "7": {
+          "current_timeline": -69.697265625,
+          "saved_sequence": -70.048828125
+        },
+        "8": {
+          "current_timeline": -11.42578125,
+          "saved_sequence": -11.337890625
+        },
+        "10": {
+          "current_timeline": -2.8125,
+          "saved_sequence": -3.0
+        },
+        "11": {
+          "current_timeline": -0.791015625,
+          "saved_sequence": -0.439453125
+        },
+        "12": {
+          "current_timeline": 0.3515625,
+          "saved_sequence": 0.4609375
+        },
+        "13": {
+          "current_timeline": -49.482421875,
+          "saved_sequence": -50.0
+        },
+        "14": {
+          "current_timeline": 66.4453125,
+          "saved_sequence": 66.26953125
+        },
+        "15": {
+          "current_timeline": 2.724609375,
+          "saved_sequence": -1.2421875
+        },
+        "16": {
+          "current_timeline": 2.4609375,
+          "saved_sequence": 2.59375
+        },
+        "17": {
+          "current_timeline": -30.41015625,
+          "saved_sequence": -27.509765625
+        },
+        "18": {
+          "current_timeline": 82.705078125,
+          "saved_sequence": 83.84765625
+        },
+        "19": {
+          "current_timeline": 64.3359375,
+          "saved_sequence": 64.6875
+        },
+        "20": {
+          "current_timeline": -103.447265625,
+          "saved_sequence": -103.533203125
+        },
+        "21": {
+          "current_timeline": 9.580078125,
+          "saved_sequence": 10.31640625
+        },
+        "22": {
+          "current_timeline": 25.751953125,
+          "saved_sequence": 26.19140625
+        }
+      }
+    },
+    {
+      "number": 2,
+      "current_name": "ttt미세왼옆2",
+      "saved_name": "r미세왼옆2",
+      "differing_angle_count": 21,
+      "angle_differences": {
+        "0": {
+          "current_timeline": 0.791015625,
+          "saved_sequence": 1.0
+        },
+        "1": {
+          "current_timeline": -0.439453125,
+          "saved_sequence": -0.3515625
+        },
+        "2": {
+          "current_timeline": -9.66796875,
+          "saved_sequence": -9.755859375
+        },
+        "4": {
+          "current_timeline": 19.16015625,
+          "saved_sequence": 19.3359375
+        },
+        "5": {
+          "current_timeline": -17.841796875,
+          "saved_sequence": -18.45703125
+        },
+        "6": {
+          "current_timeline": 68.203125,
+          "saved_sequence": 68.37890625
+        },
+        "7": {
+          "current_timeline": -69.521484375,
+          "saved_sequence": -69.697265625
+        },
+        "9": {
+          "current_timeline": 2.900390625,
+          "saved_sequence": 3.1640625
+        },
+        "10": {
+          "current_timeline": -3.1640625,
+          "saved_sequence": -2.724609375
+        },
+        "11": {
+          "current_timeline": -0.87890625,
+          "saved_sequence": -0.263671875
+        },
+        "12": {
+          "current_timeline": 0.615234375,
+          "saved_sequence": 0.52734375
+        },
+        "13": {
+          "current_timeline": -52.03125,
+          "saved_sequence": -51.767578125
+        },
+        "14": {
+          "current_timeline": 52.734375,
+          "saved_sequence": 52.3828125
+        },
+        "15": {
+          "current_timeline": 3.33984375,
+          "saved_sequence": 2.900390625
+        },
+        "16": {
+          "current_timeline": 6.6796875,
+          "saved_sequence": 7.03125
+        },
+        "17": {
+          "current_timeline": -29.70703125,
+          "saved_sequence": -29.00390625
+        },
+        "18": {
+          "current_timeline": 41.044921875,
+          "saved_sequence": 41.30859375
+        },
+        "19": {
+          "current_timeline": 65.126953125,
+          "saved_sequence": 64.951171875
+        },
+        "20": {
+          "current_timeline": -76.201171875,
+          "saved_sequence": -75.849609375
+        },
+        "21": {
+          "current_timeline": 5.537109375,
+          "saved_sequence": 3.69140625
+        },
+        "22": {
+          "current_timeline": -0.439453125,
+          "saved_sequence": -1.0546875
+        }
+      }
+    },
+    {
+      "number": 3,
+      "current_name": "ttt미세왼옆3",
+      "saved_name": "r미세왼옆3",
+      "differing_angle_count": 21,
+      "angle_differences": {
+        "0": {
+          "current_timeline": 0.791015625,
+          "saved_sequence": 1.0
+        },
+        "1": {
+          "current_timeline": -0.52734375,
+          "saved_sequence": -0.439453125
+        },
+        "3": {
+          "current_timeline": 9.140625,
+          "saved_sequence": 8.96484375
+        },
+        "4": {
+          "current_timeline": 17.490234375,
+          "saved_sequence": 17.666015625
+        },
+        "5": {
+          "current_timeline": -17.75390625,
+          "saved_sequence": -17.9296875
+        },
+        "6": {
+          "current_timeline": 67.763671875,
+          "saved_sequence": 67.939453125
+        },
+        "7": {
+          "current_timeline": -69.08203125,
+          "saved_sequence": -69.2578125
+        },
+        "8": {
+          "current_timeline": -11.42578125,
+          "saved_sequence": -11.513671875
+        },
+        "9": {
+          "current_timeline": 2.900390625,
+          "saved_sequence": 3.076171875
+        },
+        "10": {
+          "current_timeline": -0.3515625,
+          "saved_sequence": 0.087890625
+        },
+        "11": {
+          "current_timeline": -0.3515625,
+          "saved_sequence": -0.087890625
+        },
+        "12": {
+          "current_timeline": 2.109375,
+          "saved_sequence": 2.263671875
+        },
+        "13": {
+          "current_timeline": -59.58984375,
+          "saved_sequence": -59.677734375
+        },
+        "14": {
+          "current_timeline": 52.20703125,
+          "saved_sequence": 52.822265625
+        },
+        "15": {
+          "current_timeline": 4.39453125,
+          "saved_sequence": 4.5703125
+        },
+        "16": {
+          "current_timeline": 3.076171875,
+          "saved_sequence": 3.693359375
+        },
+        "17": {
+          "current_timeline": -72.0703125,
+          "saved_sequence": -73.037109375
+        },
+        "18": {
+          "current_timeline": 44.384765625,
+          "saved_sequence": 43.154296875
+        },
+        "20": {
+          "current_timeline": -76.025390625,
+          "saved_sequence": -76.201171875
+        },
+        "21": {
+          "current_timeline": 33.22265625,
+          "saved_sequence": 33.75
+        },
+        "22": {
+          "current_timeline": -10.986328125,
+          "saved_sequence": -12.998046875
+        }
+      }
+    },
+    {
+      "number": 4,
+      "current_name": "미세오옆꽃게90-5",
+      "saved_name": "미세오옆꽃게90-5",
+      "differing_angle_count": 0,
+      "angle_differences": {}
+    }
+  ],
+  "exported_motion": {
+    "name": "tt미세왼옆0도",
+    "max_seq_ms": 7045,
+    "repeat_count": 1,
+    "playback_speed": 0.95,
+    "repeatable": true,
+    "start_pose": "r미세왼옆1",
+    "end_pose": "미세오옆꽃게90-5",
+    "completion": {
+      "position_tolerance_deg": 2.0,
+      "settle_duration_ms": 80,
+      "settle_timeout_ms": 3000
+    },
+    "frames": [
+      {
+        "frame_id": "3c65732adc7c443ba427644e7394d6a2",
+        "name": "r미세왼옆1",
+        "time_ms": 60,
+        "angles": {
+          "0": 1.0,
+          "1": -0.791015625,
+          "2": -9.66796875,
+          "3": 8.7890625,
+          "4": 20.7421875,
+          "5": -18.720703125,
+          "6": 68.73046875,
+          "7": -70.048828125,
+          "8": -11.337890625,
+          "9": 2.900390625,
+          "10": -3.0,
+          "11": -0.439453125,
+          "12": 0.4609375,
+          "15": -1.2421875,
+          "16": 2.59375,
+          "13": -50.0,
+          "14": 66.26953125,
+          "17": -27.509765625,
+          "18": 83.84765625,
+          "19": 64.6875,
+          "20": -103.533203125,
+          "21": 10.31640625,
+          "22": 26.19140625
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "3c65732adc7c443ba427644e7394d6a2",
+        "start_ms": 80
+      },
+      {
+        "frame_id": "27f8560fcec74b228931bd1238115242",
+        "name": "r미세왼옆2",
+        "time_ms": 120,
+        "angles": {
+          "0": 1.0,
+          "1": -0.3515625,
+          "2": -9.755859375,
+          "3": 8.96484375,
+          "4": 19.3359375,
+          "5": -18.45703125,
+          "6": 68.37890625,
+          "7": -69.697265625,
+          "8": -11.337890625,
+          "9": 3.1640625,
+          "10": -2.724609375,
+          "11": -0.263671875,
+          "12": 0.52734375,
+          "15": 2.900390625,
+          "16": 7.03125,
+          "13": -51.767578125,
+          "14": 52.3828125,
+          "17": -29.00390625,
+          "18": 41.30859375,
+          "19": 64.951171875,
+          "20": -75.849609375,
+          "21": 3.69140625,
+          "22": -1.0546875
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "27f8560fcec74b228931bd1238115242",
+        "start_ms": 140
+      },
+      {
+        "frame_id": "ae757e2756514bb49a534cae7e357df9",
+        "name": "r미세왼옆3",
+        "time_ms": 100,
+        "angles": {
+          "0": 1.0,
+          "1": -0.439453125,
+          "2": -9.931640625,
+          "3": 8.96484375,
+          "4": 17.666015625,
+          "5": -17.9296875,
+          "6": 67.939453125,
+          "7": -69.2578125,
+          "8": -11.513671875,
+          "9": 3.076171875,
+          "10": 0.087890625,
+          "11": -0.087890625,
+          "12": 2.263671875,
+          "15": 4.5703125,
+          "16": 3.693359375,
+          "13": -59.677734375,
+          "14": 52.822265625,
+          "17": -73.037109375,
+          "18": 43.154296875,
+          "19": 92.548828125,
+          "20": -76.201171875,
+          "21": 33.75,
+          "22": -12.998046875
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "ae757e2756514bb49a534cae7e357df9",
+        "start_ms": 320
+      },
+      {
+        "frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+        "name": "미세오옆꽃게90-5",
+        "time_ms": 120,
+        "angles": {
+          "0": 1.0,
+          "1": 0.263671875,
+          "2": -10.107421875,
+          "3": 9.052734375,
+          "4": 19.86328125,
+          "5": -17.314453125,
+          "6": 67.5,
+          "7": -68.90625,
+          "8": -11.42578125,
+          "9": 3.076171875,
+          "10": 0.52734375,
+          "11": -1.52734375,
+          "12": 2.98828125,
+          "15": 3.603515625,
+          "16": -1.58203125,
+          "13": -45.703125,
+          "14": 47.63671875,
+          "17": -30.322265625,
+          "18": 29.443359375,
+          "19": 68.02734375,
+          "20": -68.291015625,
+          "21": 5.09765625,
+          "22": -5.9765625
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+        "start_ms": 420
+      }
+    ]
+  },
+  "saved_motion": {
+    "sequence_id": "c39fea737e0a450da961e84dc652def9",
+    "name": "tt미세왼옆0도",
+    "max_seq_ms": 7045,
+    "repeat_count": 1,
+    "playback_speed": 0.95,
+    "repeatable": true,
+    "completion": {
+      "position_tolerance_deg": 2.0,
+      "settle_duration_ms": 80,
+      "settle_timeout_ms": 3000
+    },
+    "frames": [
+      {
+        "frame_id": "3c65732adc7c443ba427644e7394d6a2",
+        "name": "r미세왼옆1",
+        "time_ms": 60,
+        "angles": {
+          "0": 1.0,
+          "1": -0.791015625,
+          "2": -9.66796875,
+          "3": 8.7890625,
+          "4": 20.7421875,
+          "5": -18.720703125,
+          "6": 68.73046875,
+          "7": -70.048828125,
+          "8": -11.337890625,
+          "9": 2.900390625,
+          "10": -3.0,
+          "11": -0.439453125,
+          "12": 0.4609375,
+          "15": -1.2421875,
+          "16": 2.59375,
+          "13": -50.0,
+          "14": 66.26953125,
+          "17": -27.509765625,
+          "18": 83.84765625,
+          "19": 64.6875,
+          "20": -103.533203125,
+          "21": 10.31640625,
+          "22": 26.19140625
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "3c65732adc7c443ba427644e7394d6a2",
+        "start_ms": 80
+      },
+      {
+        "frame_id": "27f8560fcec74b228931bd1238115242",
+        "name": "r미세왼옆2",
+        "time_ms": 120,
+        "angles": {
+          "0": 1.0,
+          "1": -0.3515625,
+          "2": -9.755859375,
+          "3": 8.96484375,
+          "4": 19.3359375,
+          "5": -18.45703125,
+          "6": 68.37890625,
+          "7": -69.697265625,
+          "8": -11.337890625,
+          "9": 3.1640625,
+          "10": -2.724609375,
+          "11": -0.263671875,
+          "12": 0.52734375,
+          "15": 2.900390625,
+          "16": 7.03125,
+          "13": -51.767578125,
+          "14": 52.3828125,
+          "17": -29.00390625,
+          "18": 41.30859375,
+          "19": 64.951171875,
+          "20": -75.849609375,
+          "21": 3.69140625,
+          "22": -1.0546875
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "27f8560fcec74b228931bd1238115242",
+        "start_ms": 140
+      },
+      {
+        "frame_id": "ae757e2756514bb49a534cae7e357df9",
+        "name": "r미세왼옆3",
+        "time_ms": 100,
+        "angles": {
+          "0": 1.0,
+          "1": -0.439453125,
+          "2": -9.931640625,
+          "3": 8.96484375,
+          "4": 17.666015625,
+          "5": -17.9296875,
+          "6": 67.939453125,
+          "7": -69.2578125,
+          "8": -11.513671875,
+          "9": 3.076171875,
+          "10": 0.087890625,
+          "11": -0.087890625,
+          "12": 2.263671875,
+          "15": 4.5703125,
+          "16": 3.693359375,
+          "13": -59.677734375,
+          "14": 52.822265625,
+          "17": -73.037109375,
+          "18": 43.154296875,
+          "19": 92.548828125,
+          "20": -76.201171875,
+          "21": 33.75,
+          "22": -12.998046875
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "ae757e2756514bb49a534cae7e357df9",
+        "start_ms": 320
+      },
+      {
+        "frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+        "name": "미세오옆꽃게90-5",
+        "time_ms": 120,
+        "angles": {
+          "0": 1.0,
+          "1": 0.263671875,
+          "2": -10.107421875,
+          "3": 9.052734375,
+          "4": 19.86328125,
+          "5": -17.314453125,
+          "6": 67.5,
+          "7": -68.90625,
+          "8": -11.42578125,
+          "9": 3.076171875,
+          "10": 0.52734375,
+          "11": -1.52734375,
+          "12": 2.98828125,
+          "15": 3.603515625,
+          "16": -1.58203125,
+          "13": -45.703125,
+          "14": 47.63671875,
+          "17": -30.322265625,
+          "18": 29.443359375,
+          "19": 68.02734375,
+          "20": -68.291015625,
+          "21": 5.09765625,
+          "22": -5.9765625
+        },
+        "torques": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "15": true,
+          "16": true,
+          "13": true,
+          "14": true,
+          "17": true,
+          "18": true,
+          "19": true,
+          "20": true,
+          "21": true,
+          "22": true
+        },
+        "is_important": false,
+        "lift_early_arrival": true,
+        "source_frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+        "start_ms": 420
+      }
+    ],
+    "export_enabled": true
+  },
+  "current_timeline": [
+    {
+      "frame_id": "e0b990ceb53f4ac1aa3663eaec901c91",
+      "name": "ttt미세왼옆1",
+      "time_ms": 60,
+      "angles": {
+        "0": 0.791015625,
+        "1": -0.87890625,
+        "2": -9.84375,
+        "3": 9.052734375,
+        "4": 20.478515625,
+        "5": -17.841796875,
+        "6": 68.466796875,
+        "7": -69.697265625,
+        "8": -11.42578125,
+        "9": 2.900390625,
+        "10": -2.8125,
+        "11": -0.791015625,
+        "12": 0.3515625,
+        "15": 2.724609375,
+        "16": 2.4609375,
+        "13": -49.482421875,
+        "14": 66.4453125,
+        "17": -30.41015625,
+        "18": 82.705078125,
+        "19": 64.3359375,
+        "20": -103.447265625,
+        "21": 9.580078125,
+        "22": 25.751953125
+      },
+      "torques": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": true,
+        "7": true,
+        "8": true,
+        "9": true,
+        "10": true,
+        "11": true,
+        "12": true,
+        "15": true,
+        "16": true,
+        "13": true,
+        "14": true,
+        "17": true,
+        "18": true,
+        "19": true,
+        "20": true,
+        "21": true,
+        "22": true
+      },
+      "is_important": false,
+      "lift_early_arrival": true,
+      "source_frame_id": "e0b990ceb53f4ac1aa3663eaec901c91",
+      "start_ms": 80
+    },
+    {
+      "frame_id": "9bf29f895d89450287167be89ef04b25",
+      "name": "ttt미세왼옆2",
+      "time_ms": 120,
+      "angles": {
+        "0": 0.791015625,
+        "1": -0.439453125,
+        "2": -9.66796875,
+        "3": 8.96484375,
+        "4": 19.16015625,
+        "5": -17.841796875,
+        "6": 68.203125,
+        "7": -69.521484375,
+        "8": -11.337890625,
+        "9": 2.900390625,
+        "10": -3.1640625,
+        "11": -0.87890625,
+        "12": 0.615234375,
+        "15": 3.33984375,
+        "16": 6.6796875,
+        "13": -52.03125,
+        "14": 52.734375,
+        "17": -29.70703125,
+        "18": 41.044921875,
+        "19": 65.126953125,
+        "20": -76.201171875,
+        "21": 5.537109375,
+        "22": -0.439453125
+      },
+      "torques": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": true,
+        "7": true,
+        "8": true,
+        "9": true,
+        "10": true,
+        "11": true,
+        "12": true,
+        "15": true,
+        "16": true,
+        "13": true,
+        "14": true,
+        "17": true,
+        "18": true,
+        "19": true,
+        "20": true,
+        "21": true,
+        "22": true
+      },
+      "is_important": false,
+      "lift_early_arrival": true,
+      "source_frame_id": "9bf29f895d89450287167be89ef04b25",
+      "start_ms": 140
+    },
+    {
+      "frame_id": "5a8dd63dce5e4c36945eb8a7180c1bf8",
+      "name": "ttt미세왼옆3",
+      "time_ms": 100,
+      "angles": {
+        "0": 0.791015625,
+        "1": -0.52734375,
+        "2": -9.931640625,
+        "3": 9.140625,
+        "4": 17.490234375,
+        "5": -17.75390625,
+        "6": 67.763671875,
+        "7": -69.08203125,
+        "8": -11.42578125,
+        "9": 2.900390625,
+        "10": -0.3515625,
+        "11": -0.3515625,
+        "12": 2.109375,
+        "15": 4.39453125,
+        "16": 3.076171875,
+        "13": -59.58984375,
+        "14": 52.20703125,
+        "17": -72.0703125,
+        "18": 44.384765625,
+        "19": 92.548828125,
+        "20": -76.025390625,
+        "21": 33.22265625,
+        "22": -10.986328125
+      },
+      "torques": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": true,
+        "7": true,
+        "8": true,
+        "9": true,
+        "10": true,
+        "11": true,
+        "12": true,
+        "15": true,
+        "16": true,
+        "13": true,
+        "14": true,
+        "17": true,
+        "18": true,
+        "19": true,
+        "20": true,
+        "21": true,
+        "22": true
+      },
+      "is_important": false,
+      "lift_early_arrival": true,
+      "source_frame_id": "5a8dd63dce5e4c36945eb8a7180c1bf8",
+      "start_ms": 320
+    },
+    {
+      "frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+      "name": "미세오옆꽃게90-5",
+      "time_ms": 120,
+      "angles": {
+        "0": 1.0,
+        "1": 0.263671875,
+        "2": -10.107421875,
+        "3": 9.052734375,
+        "4": 19.86328125,
+        "5": -17.314453125,
+        "6": 67.5,
+        "7": -68.90625,
+        "8": -11.42578125,
+        "9": 3.076171875,
+        "10": 0.52734375,
+        "11": -1.52734375,
+        "12": 2.98828125,
+        "15": 3.603515625,
+        "16": -1.58203125,
+        "13": -45.703125,
+        "14": 47.63671875,
+        "17": -30.322265625,
+        "18": 29.443359375,
+        "19": 68.02734375,
+        "20": -68.291015625,
+        "21": 5.09765625,
+        "22": -5.9765625
+      },
+      "torques": {
+        "0": true,
+        "1": true,
+        "2": true,
+        "3": true,
+        "4": true,
+        "5": true,
+        "6": true,
+        "7": true,
+        "8": true,
+        "9": true,
+        "10": true,
+        "11": true,
+        "12": true,
+        "15": true,
+        "16": true,
+        "13": true,
+        "14": true,
+        "17": true,
+        "18": true,
+        "19": true,
+        "20": true,
+        "21": true,
+        "22": true
+      },
+      "is_important": false,
+      "lift_early_arrival": true,
+      "source_frame_id": "91fbbd0a629c40c4946c3121ce13cf14",
+      "start_ms": 420
+    }
+  ],
+  "same_name_different_id_propagation_reproduced": true
+}

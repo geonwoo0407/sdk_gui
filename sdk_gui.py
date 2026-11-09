@@ -33,6 +33,7 @@ from PyQt5.QtGui import QPainter, QColor, QPen, QMatrix4x4, QKeySequence, QPaint
 # 🔥 다이나믹셀 SDK 라이브러리 임포트
 from dynamixel_sdk import *
 from dynamixel_sdk.protocol2_packet_handler import Protocol2PacketHandler
+from continuous_trajectory import ContinuousTrajectory
 
 # 🤖 하드웨어 및 다이나믹셀 통신 주소 세팅 (MX 시리즈 프로토콜 2.0 기준)
 ADDR_FIRMWARE_VERSION       = 6
@@ -66,7 +67,7 @@ LIFT_FRAME_KEYWORDS         = ("발들", "들기", "오들", "왼들")
 TIMED_FEEDBACK_FREQUENCY_HZ = 100
 TIMED_FEEDBACK_INTERVAL_SEC = 1.0 / TIMED_FEEDBACK_FREQUENCY_HZ
 
-# 실기 재생은 200Hz로 half-cosine 중간 목표각을 전송합니다.
+# 실기 재생은 200Hz로 선택된 보간 방식의 중간 목표각을 전송합니다.
 # 프레임 끝에서는 최종각을 확정하고 도착 대기 없이 타임라인대로 진행합니다.
 CONTROL_FREQUENCY_HZ        = 200
 CONTROL_INTERVAL_MS         = int(round(1000.0 / CONTROL_FREQUENCY_HZ))
@@ -93,7 +94,8 @@ TIMING_REPAIRS_FILENAME = "sdk_gui_timing_repairs.json"
 MIN_TIMELINE_FRAME_MS = 10
 DEFAULT_SEQUENCE_FRAME_MS = 100
 SEQUENCE_CATEGORIES = (
-    "전체", "제자리 좌회전", "제자리 우회전", "전진", "후진", "미세", "허들",
+    "전체", "제자리 좌회전", "제자리 우회전", "전진", "후진", "오옆", "왼옆",
+    "미세", "허들",
     "라인복귀 좌회전", "라인복귀 우회전",
 )
 
@@ -1687,6 +1689,10 @@ class SDKMotionEditor(QWidget):
         self.last_timed_feedback_time = 0.0
         self.timed_profile_error_reported = False
         self.timed_gate_frame = None
+        self.continuous_motion_enabled = True
+        self.excluded_joint_ids = set()
+        self._continuous_plan = None
+        self._continuous_plan_key = None
         
         self.execute_on_real_robot = False
         self.robot_sync_enabled = False
@@ -1829,6 +1835,9 @@ class SDKMotionEditor(QWidget):
         if not self.port_opened: return
         print("📡 [온라인 모터 감지] 23개 관절 중 실제 작동 중인 모터를 수색합니다...")
         for j_id in range(23):
+            if j_id in getattr(self, 'excluded_joint_ids', set()):
+                print(f"   ⚪ ID {j_id:02d} - 사용자 설정으로 구동/피드백 제외")
+                continue
             # 1. 핑 테스트로 확인
             _, dxl_comm_result, _ = self.packetHandler.ping(self.portHandler, j_id)
             if dxl_comm_result == COMM_SUCCESS:
@@ -1879,7 +1888,8 @@ class SDKMotionEditor(QWidget):
         if not self.port_opened:
             return False
 
-        ids = sorted(set(self.online_joints if target_ids is None else target_ids))
+        ids = sorted(set(self.online_joints if target_ids is None else target_ids)
+                     - getattr(self, 'excluded_joint_ids', set()))
         if not ids:
             return False
 
@@ -1918,7 +1928,8 @@ class SDKMotionEditor(QWidget):
         if not self.port_opened:
             return False
 
-        ids = sorted(set(self.online_joints if target_ids is None else target_ids))
+        ids = sorted(set(self.online_joints if target_ids is None else target_ids)
+                     - getattr(self, 'excluded_joint_ids', set()))
         if not ids:
             return False
         if set(ids).issubset(self.time_based_profile_ids):
@@ -1992,7 +2003,8 @@ class SDKMotionEditor(QWidget):
         accel_ms가 0이면 기존 동작과 동일합니다. Time-based Profile에서
         Profile Acceleration은 시작 가속과 종료 감속 구간에 함께 적용됩니다.
         """
-        ids = sorted(set(int(j_id) for j_id in target_ids))
+        ids = sorted(set(int(j_id) for j_id in target_ids)
+                     - getattr(self, 'excluded_joint_ids', set()))
         if not ids or not set(ids).issubset(self.time_based_profile_ids):
             return False
 
@@ -2100,6 +2112,14 @@ class SDKMotionEditor(QWidget):
             return
 
         btn = self.torque_btns[j_id]
+        if j_id in getattr(self, 'excluded_joint_ids', set()):
+            btn.blockSignals(True)
+            btn.setChecked(False)
+            btn.setEnabled(False)
+            btn.setText("제외")
+            btn.setStyleSheet("background-color: #795548; color: white; font-weight: bold;")
+            btn.blockSignals(False)
+            return
         btn.blockSignals(True)
         btn.setEnabled(is_online)
         btn.setChecked(torque_on if is_online else False)
@@ -2664,6 +2684,14 @@ class SDKMotionEditor(QWidget):
         self.lbl_conn_status.setStyleSheet("font-weight: bold; font-size: 14pt; background-color: #333; color: #FFC107; padding: 8px; border-radius: 5px; margin-bottom: 5px;")
         main_layout.addWidget(self.lbl_conn_status)
         recovery_layout = QHBoxLayout()
+        self.check_exclude_motor5 = QCheckBox("5번 제외하고 구동")
+        self.check_exclude_motor5.setToolTip(
+            "켜면 5번의 자동 토크 ON·목표각·상태 읽기를 제외합니다. "
+            "5번의 실제 토크/자세를 보장하지 않으며, 전체 토크 OFF에는 포함합니다. "
+            "해제 후에는 모터 재탐색을 눌러 다시 연결하세요."
+        )
+        self.check_exclude_motor5.toggled.connect(self.set_motor5_excluded)
+        recovery_layout.addWidget(self.check_exclude_motor5)
         recovery_layout.addStretch(1)
         self.btn_undo_state = QPushButton("↩ 직전 변경 복구 (Ctrl+Z)")
         self.btn_undo_state.setStyleSheet(
@@ -3008,7 +3036,8 @@ class SDKMotionEditor(QWidget):
         self.btn_checked_sequences_only = QPushButton("☑ 배포 체크만 보기")
         self.btn_checked_sequences_only.setCheckable(True)
         self.btn_checked_sequences_only.setToolTip(
-            "배포 체크박스를 선택한 저장 시퀀스만 목록에 표시합니다."
+            "배포 체크한 시퀀스를 0도 → 45도 → 90도 순으로 표시합니다. "
+            "이름에 각도가 없으면 45도로 분류합니다."
         )
         self.btn_checked_sequences_only.setStyleSheet(
             "QPushButton { font-weight: bold; padding: 6px; }"
@@ -3347,6 +3376,8 @@ class SDKMotionEditor(QWidget):
         
         main_layout.addLayout(top_layout, 5)
         main_layout.addWidget(ctrl_group, 1)
+        self.check_continuous_motion = self.create_continuous_motion_control()
+        main_layout.addWidget(self.check_continuous_motion)
         main_layout.addWidget(timeline_group, 3)
         
         # tab에는 outer_layout이 이미 생성자 인자로 설정되어 있습니다.
@@ -3410,7 +3441,8 @@ class SDKMotionEditor(QWidget):
         self.btn_composer_checked_sequences_only.setCheckable(True)
         self.btn_composer_checked_sequences_only.setChecked(True)
         self.btn_composer_checked_sequences_only.setToolTip(
-            "모션 제작에서 배포 체크한 시퀀스만 표시합니다. 끄면 전체를 표시합니다."
+            "배포 체크한 시퀀스를 각도순으로 표시합니다. "
+            "각도가 없으면 45도로 분류하며, 끄면 전체를 표시합니다."
         )
         self.btn_composer_checked_sequences_only.setStyleSheet(
             "QPushButton { font-weight: bold; padding: 6px; }"
@@ -3579,7 +3611,37 @@ class SDKMotionEditor(QWidget):
             button.setMinimumHeight(45)
             controls.addWidget(button)
         main_layout.addWidget(composer_ctrl_group, 1)
+        self.check_composer_continuous_motion = self.create_continuous_motion_control()
+        main_layout.addWidget(self.check_composer_continuous_motion)
         main_layout.addWidget(chain_group, 3)
+
+    def create_continuous_motion_control(self):
+        checkbox = QCheckBox("연속 보간 (중간 프레임 정지 줄이기)")
+        checkbox.setChecked(getattr(self, 'continuous_motion_enabled', True))
+        checkbox.setToolTip(
+            "인접 프레임에서 같은 방향으로 움직이는 관절의 속도를 연결합니다. "
+            "방향 전환·대기·[착지]·반복 경계에서는 정지합니다. "
+            "켜면 발 들기에도 전체 프레임 시간을 사용합니다. "
+            "끄면 기존 코사인 보간과 80% 조기 도착 방식으로 돌아갑니다."
+        )
+        checkbox.toggled.connect(self.set_continuous_motion_enabled)
+        return checkbox
+
+    def set_continuous_motion_enabled(self, enabled):
+        # 재생/일시정지 중에는 궤적을 바꿔 목표각이 뛰지 않도록 고정합니다.
+        if self.is_playing or self.is_paused:
+            enabled = getattr(self, 'continuous_motion_enabled', True)
+        self.continuous_motion_enabled = bool(enabled)
+        self._continuous_plan = None
+        self._continuous_plan_key = None
+        for name in ('check_continuous_motion', 'check_composer_continuous_motion'):
+            checkbox = getattr(self, name, None)
+            if checkbox is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(self.continuous_motion_enabled)
+                checkbox.blockSignals(False)
+        if hasattr(self, 'trajectory_graph'):
+            self.trajectory_graph.update()
 
     def refresh_composer_source_list(self):
         if not hasattr(self, 'composer_source_list'):
@@ -3601,9 +3663,7 @@ class SDKMotionEditor(QWidget):
             and self.btn_composer_checked_sequences_only.isChecked()
         )
         self.composer_source_list.clear()
-        for idx, sequence in enumerate(self.saved_sequences):
-            if checked_only and not sequence.get('export_enabled', False):
-                continue
+        for idx, sequence in self.sequence_list_entries(checked_only):
             if query and query not in self.normalized_search_text(sequence.get('name', '')):
                 continue
             if category != "전체" and self.sequence_category_for_name(
@@ -3616,8 +3676,12 @@ class SDKMotionEditor(QWidget):
                 default=0,
             )
             checked_prefix = "☑ " if sequence.get('export_enabled', False) else ""
+            angle_prefix = (
+                f"[{self.sequence_angle_for_name(sequence.get('name', '')):g}도] "
+                if checked_only else ""
+            )
             item = QListWidgetItem(
-                f"{checked_prefix}[{idx + 1}] {sequence['name']} "
+                f"{checked_prefix}{angle_prefix}[{idx + 1}] {sequence['name']} "
                 f"({len(frames)} 프레임 / {duration}ms / "
                 f"{sequence.get('repeat_count', 1)}회 / "
                 f"원본 배속 {sequence.get('playback_speed', 1.0):.2f}x)"
@@ -4492,6 +4556,8 @@ class SDKMotionEditor(QWidget):
         )
 
     def refresh_timeline_ui(self):
+        self._continuous_plan = None
+        self._continuous_plan_key = None
         # 로드된 예전 데이터나 일괄 시간 변경 결과도 그리기 전에 정렬하여
         # 블록이 같은 트랙에서 서로 겹치는 상태를 허용하지 않습니다.
         self.resort_motion_sequence()
@@ -4757,6 +4823,15 @@ class SDKMotionEditor(QWidget):
             self.load_saved_sequence(idx)
 
     def update_playback_buttons(self):
+        if hasattr(self, 'check_exclude_motor5'):
+            self.check_exclude_motor5.setEnabled(
+                not self.is_playing and not self.is_paused
+                and not self.robot_sync_enabled and not self.frame_apply_timer.isActive()
+            )
+        for name in ('check_continuous_motion', 'check_composer_continuous_motion'):
+            checkbox = getattr(self, name, None)
+            if checkbox is not None:
+                checkbox.setEnabled(not self.is_playing and not self.is_paused)
         self.btn_keyframe_play.setEnabled(not self.is_playing)
         self.spin_motion_repeat.setEnabled(
             not self.is_playing and not (self.is_paused and self.playback_context == "motion")
@@ -4844,6 +4919,26 @@ class SDKMotionEditor(QWidget):
                 self.composer_btn_sync.setText("🤖 로봇 동기화: OFF")
                 self.composer_btn_sync.blockSignals(False)
             print("[🔓 로봇 동기화 OFF] 타임라인 조작은 3D 미리보기에만 반영됩니다.")
+        self.update_playback_buttons()
+
+    def set_motor5_excluded(self, excluded):
+        current = 5 in getattr(self, 'excluded_joint_ids', set())
+        if (self.is_playing or self.is_paused or self.robot_sync_enabled
+                or self.frame_apply_timer.isActive()):
+            self.check_exclude_motor5.blockSignals(True)
+            self.check_exclude_motor5.setChecked(current)
+            self.check_exclude_motor5.blockSignals(False)
+            return
+        self.excluded_joint_ids = {5} if excluded else set()
+        if excluded:
+            self.online_joints = [joint for joint in self.online_joints if joint != 5]
+            self.commanded_joint_ids.discard(5)
+            self.feedback_angles.pop(5, None)
+            print("[5번 제외] 자동 구동·피드백에서 제외합니다. 실제 토크 상태는 미확인입니다.")
+        else:
+            print("[5번 제외 해제] 모터 재탐색 후 다시 구동에 포함됩니다.")
+        self.set_joint_connection_ui(5, False, False)
+        self.update_torque_group_buttons()
 
     def sync_sequence_start_from_robot(self):
         """첫 키프레임 보간 전에 실제 로봇 자세를 시작값으로 확정합니다."""
@@ -4969,8 +5064,11 @@ class SDKMotionEditor(QWidget):
         self.last_timed_feedback_time = 0.0
         self.timed_profile_error_reported = False
         self.timed_gate_frame = None
+        self._continuous_plan = None
+        self._continuous_plan_key = None
         if self.execute_on_real_robot:
-            print("[GUI 코사인 재생] 200Hz 중간 목표각 전송 · 도착 대기 없이 진행")
+            mode = "연속" if self.continuous_motion_enabled else "코사인"
+            print(f"[GUI {mode} 재생] 200Hz 중간 목표각 전송 · 도착 대기 없이 진행")
         now = time.perf_counter()
         self.anim_start_time = (
             now - self.playback_time_ms(self.current_timeline_ms) / (1000.0 * self.playback_speed)
@@ -5234,12 +5332,9 @@ class SDKMotionEditor(QWidget):
                 if end_t <= active_frame['start_ms']:
                     prev_state.update(self.normalize_angles(f['angles']))
             
-            progress = self.frame_motion_progress(active_frame, t_ms)
-            active_angles = self.normalize_angles(active_frame['angles'])
-            for j_id in active_angles:
-                v0 = prev_state.get(j_id, active_angles[j_id])
-                v1 = active_angles.get(j_id, 0)
-                target_angles_to_render[j_id] = self.interpolate_angle_shortest(v0, v1, progress)
+            target_angles_to_render = self.timeline_frame_angles(
+                active_frame, t_ms, prev_state,
+            )
         else:
             # 프레임이 없는 모든 빈 시간은 같은 '대기' 구간입니다.
             # 시작 자세 위에 프레임을 순서대로 누적합니다. 맨 앞 공백에서는
@@ -5276,7 +5371,7 @@ class SDKMotionEditor(QWidget):
         
         if self.is_playing:
             if self.execute_on_real_robot:
-                # 화면과 같은 코사인 궤적의 중간 목표각을 매 제어 tick에 보냅니다.
+                # 화면과 같은 궤적의 중간 목표각을 매 제어 tick에 보냅니다.
                 if active_frame is not None:
                     frame_key = active_frame.get("frame_id") or id(active_frame)
                     token = (
@@ -5289,14 +5384,18 @@ class SDKMotionEditor(QWidget):
                         self.active_timed_frame_token = token
                         self.timed_gate_frame = active_frame
                         print(
-                            f"[GUI 코사인 프레임] '{active_frame.get('name', 'Frame')}' "
+                            f"[GUI {'연속' if getattr(self, 'continuous_motion_enabled', False) else '코사인'} 프레임] "
+                            f"'{active_frame.get('name', 'Frame')}' "
                             f"{active_frame.get('time_ms', 0)}ms"
                         )
 
                 target_ids = sorted(
                     set(target_angles_to_render) & set(self.online_joints)
                 )
-                if not target_ids or not self.write_goal_positions(
+                only_excluded = bool(target_angles_to_render) and not (
+                    set(target_angles_to_render) - getattr(self, 'excluded_joint_ids', set())
+                )
+                if (not target_ids and not only_excluded) or not self.write_goal_positions(
                     target_angles_to_render,
                     target_ids=target_ids,
                     read_feedback=False,
@@ -5343,12 +5442,7 @@ class SDKMotionEditor(QWidget):
                 continue
 
             active_frame = frame
-            progress = self.frame_motion_progress(frame, t_ms)
-            for j_id, target_angle in frame_angles.items():
-                start_angle = angles.get(j_id, target_angle)
-                angles[j_id] = self.interpolate_angle_shortest(
-                    start_angle, target_angle, progress
-                )
+            angles.update(self.timeline_frame_angles(frame, t_ms, angles))
             torque_states.update(frame_torques)
             break
 
@@ -5470,6 +5564,39 @@ class SDKMotionEditor(QWidget):
     def interpolate_angle_shortest(self, start_deg, end_deg, progress):
         return float(start_deg) + self.shortest_angle_delta(start_deg, end_deg) * float(progress)
 
+    def timeline_frame_angles(self, frame, t_ms, previous_angles):
+        """화면·궤적 그래프·실기 송신에 동일한 시퀀스 보간을 적용합니다."""
+        if not getattr(self, 'continuous_motion_enabled', False):
+            progress = self.frame_motion_progress(frame, t_ms)
+            return {
+                joint: self.interpolate_angle_shortest(
+                    previous_angles.get(joint, target), target, progress,
+                )
+                for joint, target in self.normalize_angles(frame.get('angles', {})).items()
+            }
+
+        base = self.normalize_angles(self.start_angles if self.start_angles else self.joints)
+        segments = (
+            tuple(getattr(self, 'composer_playback_segments', ()))
+            if self.playback_context == 'composer' else ()
+        )
+        key = (id(self.motion_sequence), tuple(sorted(base.items())), segments)
+        if not self.is_playing:
+            # 편집 중에는 같은 dict 안의 각도/시간 변경도 미리보기에 반영합니다.
+            key += (tuple(
+                (id(item), item.get('start_ms', 0), item.get('time_ms', 0),
+                 item.get('name', ''), bool(item.get('playback_cycle_end', False)),
+                 bool(item.get('stop_at_end', False)),
+                 tuple(sorted(self.normalize_angles(item.get('angles', {})).items())))
+                for item in self.motion_sequence
+            ),)
+        if getattr(self, '_continuous_plan_key', None) != key:
+            self._continuous_plan = ContinuousTrajectory(
+                self.motion_sequence, base, time_map=self.playback_time_ms,
+            )
+            self._continuous_plan_key = key
+        return self._continuous_plan.sample_frame(frame, t_ms)
+
     def frame_motion_progress(self, frame, t_ms):
         """GUI 실기 재생용 0→1 코사인 궤적 진행률을 계산합니다."""
         start_ms = int(frame.get("start_ms", 0))
@@ -5531,7 +5658,7 @@ class SDKMotionEditor(QWidget):
         ids = set()
         for frame in self.motion_sequence:
             ids.update(self.normalize_angles(frame.get('angles', {})).keys())
-        return ids
+        return ids - getattr(self, 'excluded_joint_ids', set())
 
     def prepare_real_robot_sequence(self):
         if not self.port_opened:
@@ -5739,7 +5866,7 @@ class SDKMotionEditor(QWidget):
 
     def read_feedback_and_report_fk(self):
         """전 관절 Present Position을 SyncRead하고 현재 타임라인 FK 오차를 계산합니다."""
-        read_ids = sorted(set(self.online_joints))
+        read_ids = sorted(set(self.online_joints) - getattr(self, 'excluded_joint_ids', set()))
         if not read_ids:
             return False
 
@@ -5807,7 +5934,7 @@ class SDKMotionEditor(QWidget):
         sent_angles = {}
         for j_id in ids:
             j_id = int(j_id)
-            if j_id not in angles:
+            if j_id not in angles or j_id in getattr(self, 'excluded_joint_ids', set()):
                 continue
             dxl_goal_position = self.angle_to_dxl_position(angles[j_id])
             param_goal_position = [
@@ -5824,7 +5951,8 @@ class SDKMotionEditor(QWidget):
                 print(f"[❌ SyncWrite 준비 실패] ID {j_id} 파라미터 추가 실패")
 
         if added_count == 0:
-            return False
+            # 제외 관절만 있는 프레임은 송신 없이 타임라인을 진행합니다.
+            return not (set(angles) - getattr(self, 'excluded_joint_ids', set()))
 
         dxl_comm_result = self.groupSyncWrite.txPacket()
         if dxl_comm_result != COMM_SUCCESS:
@@ -5844,6 +5972,8 @@ class SDKMotionEditor(QWidget):
     def set_tracking_target_angles(self, angles_dict):
         """FK/관절 오차의 목표를 현재 타임라인상의 자세로 갱신합니다."""
         for j_id, angle in self.normalize_angles(angles_dict).items():
+            if j_id in getattr(self, 'excluded_joint_ids', set()):
+                continue
             dxl_position = self.angle_to_dxl_position(angle)
             self.commanded_angles[j_id] = self.dxl_position_to_angle(dxl_position)
             self.commanded_joint_ids.add(j_id)
@@ -5870,7 +6000,10 @@ class SDKMotionEditor(QWidget):
 
         frame_angles = self.normalize_angles(frame.get("angles", {}))
         target_ids = sorted(set(frame_angles) & set(self.online_joints))
-        if not target_ids or not self.write_goal_positions(
+        only_excluded = bool(frame_angles) and not (
+            set(frame_angles) - getattr(self, 'excluded_joint_ids', set())
+        )
+        if (not target_ids and not only_excluded) or not self.write_goal_positions(
             frame_angles, target_ids=target_ids, read_feedback=False,
         ):
             self.fail_timed_playback(
@@ -5975,6 +6108,8 @@ class SDKMotionEditor(QWidget):
             )
 
     def read_present_angle(self, j_id):
+        if j_id in getattr(self, 'excluded_joint_ids', set()):
+            return None
         if not hasattr(self, 'port_opened') or not self.port_opened:
             return None
 
@@ -6010,6 +6145,8 @@ class SDKMotionEditor(QWidget):
         return self.dxl_position_to_angle(dxl_present_position)
 
     def read_torque_enabled(self, j_id):
+        if j_id in getattr(self, 'excluded_joint_ids', set()):
+            return None
         if not hasattr(self, 'port_opened') or not self.port_opened:
             return None
 
@@ -6056,9 +6193,10 @@ class SDKMotionEditor(QWidget):
             if btn_group is None:
                 continue
 
-            all_on = all(
+            active_ids = [j for j in joint_ids if j not in getattr(self, 'excluded_joint_ids', set())]
+            all_on = bool(active_ids) and all(
                 j_id in self.torque_btns and self.torque_btns[j_id].isChecked()
-                for j_id in joint_ids
+                for j_id in active_ids
             )
             btn_group.blockSignals(True)
             btn_group.setChecked(all_on)
@@ -6070,6 +6208,9 @@ class SDKMotionEditor(QWidget):
             btn_group.blockSignals(False)
 
     def sync_torque(self, j_id, is_on):
+        if is_on and j_id in getattr(self, 'excluded_joint_ids', set()):
+            self.set_joint_connection_ui(j_id, False, False)
+            return
         print(f"👉 [GUI 작동 감지] {j_id}번 모터 토크 {'ON' if is_on else 'OFF'} 스위치 조작됨!")
         
         btn = self.torque_btns[j_id]
@@ -6244,6 +6385,8 @@ class SDKMotionEditor(QWidget):
     def set_all_torque_on(self):
         print("👉 [GUI 작동 감지] 전체 토크 ON 버튼 눌림!")
         if not self.port_opened: return
+        self.online_joints = [j for j in self.online_joints
+                              if j not in getattr(self, 'excluded_joint_ids', set())]
         
         # 🚀 [완벽 패치] 프로그램 기동 시 로봇 전원이 꺼져 있었더라도, 토크 ON 시점에 무조건 자동 재수색하여 활성화합니다!
         if not self.online_joints:
@@ -6339,6 +6482,9 @@ class SDKMotionEditor(QWidget):
         # 5. 그 다음 전 관절 잠금 (Torque ON)
         self.groupSyncWriteTorque.clearParam()
         for j_id, btn in self.torque_btns.items():
+            if j_id in getattr(self, 'excluded_joint_ids', set()):
+                self.set_joint_connection_ui(j_id, False, False)
+                continue
             btn.blockSignals(True)
             if j_id in read_success_ids:
                 btn.setEnabled(True)
@@ -6380,6 +6526,7 @@ class SDKMotionEditor(QWidget):
     def set_all_torque_off(self):
         print("👉 [GUI 작동 감지] 전체 토크 OFF 버튼 눌림!")
         if not self.port_opened: return
+        off_ids = set(self.online_joints) | getattr(self, 'excluded_joint_ids', set())
         self.groupSyncWriteTorque.clearParam()
         for j_id, btn in self.torque_btns.items():
             btn.blockSignals(True)
@@ -6391,16 +6538,18 @@ class SDKMotionEditor(QWidget):
             self.spinboxes[j_id].setEnabled(True)
             btn.blockSignals(False)
             
-            if j_id in self.online_joints:
+            if j_id in off_ids:
                 self.groupSyncWriteTorque.addParam(j_id, [0])
+            if j_id in getattr(self, 'excluded_joint_ids', set()):
+                self.set_joint_connection_ui(j_id, False, False)
             
-        if self.online_joints:
+        if off_ids:
             dxl_comm_result = self.groupSyncWriteTorque.txPacket()
             if dxl_comm_result != COMM_SUCCESS:
                 print(f"[❌ 에러] 전체 토크 OFF 실패: {self.packetHandler.getTxRxResult(dxl_comm_result)}")
             else:
-                print(f"[✅ 발송 완료] 감지된 {len(self.online_joints)}개 모터에 티칭(늘어짐) 명령 쐈습니다!")
-                if not self.configure_time_based_drive_mode(self.online_joints):
+                print(f"[✅ 발송 완료] 제외 ID 포함 {len(off_ids)}개 모터에 토크 OFF 송신 (적용 미확인)")
+                if self.online_joints and not self.configure_time_based_drive_mode(self.online_joints):
                     print(
                         "[⚠️ 시간 기반 프로파일 준비 실패] "
                         "실기 시퀀스 재생 전에 모터 펌웨어와 Drive Mode를 확인하세요."
@@ -6497,7 +6646,11 @@ class SDKMotionEditor(QWidget):
         self.time_spinbox.setValue(int(frame.get("time_ms", 500)))
 
         target_ids = sorted(set(angles) & set(self.online_joints))
-        missing_ids = sorted(set(angles) - set(self.online_joints))
+        missing_ids = sorted(set(angles) - set(self.online_joints)
+                             - getattr(self, 'excluded_joint_ids', set()))
+        if self.port_opened and not (set(angles) - getattr(self, 'excluded_joint_ids', set())):
+            QMessageBox.information(self, "프레임 제외", "이 프레임은 구동에서 제외한 5번 관절만 포함합니다.")
+            return
         if self.port_opened and missing_ids:
             return QMessageBox.warning(
                 self,
@@ -6920,6 +7073,21 @@ class SDKMotionEditor(QWidget):
         self.save_persistent_state()
         QMessageBox.information(self, "삭제 완료", f"'{sequence_name}' 시퀀스를 삭제했습니다.")
 
+    @staticmethod
+    def sequence_angle_for_name(name):
+        """모션 이름의 각도를 읽으며, 각도 표기가 없으면 45도로 봅니다."""
+        import re
+        match = re.search(r"(?<![\d.])(-?\d+(?:\.\d+)?)\s*(?:도|°)", str(name or ""))
+        return float(match.group(1)) if match else 45.0
+
+    def sequence_list_entries(self, checked_only=False):
+        """원본 인덱스를 유지하며 배포 체크 목록만 각도순으로 표시합니다."""
+        entries = list(enumerate(self.saved_sequences))
+        if checked_only:
+            entries = [(idx, seq) for idx, seq in entries if seq.get('export_enabled', False)]
+            entries.sort(key=lambda entry: self.sequence_angle_for_name(entry[1].get('name', '')))
+        return entries
+
     def refresh_sequence_list(self):
         if not hasattr(self, 'sequence_list_ui'):
             return
@@ -6936,12 +7104,7 @@ class SDKMotionEditor(QWidget):
             if hasattr(self, "sequence_category_combo") else "전체"
         )
         self.sequence_list_ui.clear()
-        for idx, seq in enumerate(self.saved_sequences):
-            if (
-                self.show_checked_sequences_only
-                and not seq.get("export_enabled", False)
-            ):
-                continue
+        for idx, seq in self.sequence_list_entries(self.show_checked_sequences_only):
             if query and query not in self.normalized_search_text(seq.get("name", "")):
                 continue
             if category != "전체" and self.sequence_category_for_name(
@@ -6951,6 +7114,9 @@ class SDKMotionEditor(QWidget):
             item = QListWidgetItem(self.sequence_list_ui)
             item.setData(Qt.UserRole, idx)
             row_widget = SequenceItemWidget(seq, idx, self)
+            if self.show_checked_sequences_only:
+                angle = self.sequence_angle_for_name(seq.get('name', ''))
+                row_widget.label.setText(f"[{angle:g}도] {row_widget.label.text()}")
             item.setSizeHint(row_widget.sizeHint())
             self.sequence_list_ui.setItemWidget(item, row_widget)
         self.select_sequence_list_index(selected_idx)
@@ -6971,11 +7137,15 @@ class SDKMotionEditor(QWidget):
         """이름으로 보행, 미세 동작, 허들, 라인복귀 모션을 분류합니다."""
         normalized = cls.normalized_search_text(name)
         # 복합 이름도 구체적인 동작을 우선합니다. 미세후진은 후진,
-        # 미세제자리우회전은 미세 동작으로 분류합니다.
+        # 미세오옆/미세왼옆은 옆걸음, 미세제자리우회전은 미세로 분류합니다.
         if "허들" in normalized:
             return "허들"
         if "후진" in normalized:
             return "후진"
+        if "오옆" in normalized or "오른쪽꽃게" in normalized:
+            return "오옆"
+        if "왼옆" in normalized or "왼쪽꽃게" in normalized:
+            return "왼옆"
         if "미세" in normalized:
             return "미세"
         # 실제 저장 이름의 '보귀' 오타와 '라복' 축약도 포함합니다.
